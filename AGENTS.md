@@ -23,6 +23,12 @@ phrase it so a reviewer can verify pass/fail from the diff.
 
 If a locked choice must change, update this table in the same PR and say why.
 
+**Offline tooling exception:** the Discovery agent (ADR-0003) is **Python +
+LangGraph**. This does not fork the locked stack because it is *dev-time
+tooling* — it reads captured logs and emits detection code; it never runs in the
+extension, the dashboard, or Convex, and never sits in the billing path. No
+Python at runtime.
+
 ## 2. Repo layout (pnpm-workspace monorepo)
 
 ```
@@ -85,14 +91,25 @@ Core recorded unit is a **generation event**. Canonical shape lives in
 
 ```ts
 type GenerationEvent = {
-  userId: string;        // the editor who triggered it
+  organizationId: string;   // tenant — every query filters by this (single-org, ADR-0004)
+  userId: string;           // the editor, from OUR login — not the tool seat (ADR-0004)
   tool: 'flow' | 'higgsfield' | 'kling';
-  brandId: string;       // IP / brand — top-level roll-up
-  assetId: string;       // song / video / image; shared across users
-  cost: number;          // tokens or credits consumed
-  refund: RefundState;   // discriminated union, see below
-  capturedAt: number;    // client ms epoch
-  toolRef?: string;      // tool-side job/request id, for reconciliation
+  brandId: string;          // IP under the org — top-level roll-up
+  assetId: string | 'unattributed';  // Active Asset at capture; 'unattributed' + flag if none
+  cost: number;             // credits from job_sets[].cost; 0 when the tool charged nothing (free)
+  prompt?: string;          // generation prompt — shown in the generation gallery
+  jobs: JobOutcome[];       // one per output in the batch (event = one Job set)
+  refund: RefundState;      // discriminated union; per-job refunds net into amount
+  toolAccount?: string;     // shared tool seat (e.g. aibusiness@) — metadata only
+  toolRef: string;          // tool-side job-set id, for reconciliation
+  ruleVersion: string;      // detection-rule version that produced this event (ADR-0003)
+  capturedAt: number;       // client ms epoch
+};
+
+type JobOutcome = {
+  jobId: string;
+  status: 'queued' | 'in_progress' | 'completed' | 'failed';  // failure strings TBD — see discovery
+  mediaUrl?: string;        // result media URL when completed — shown in the gallery
 };
 
 type RefundState =
@@ -101,8 +118,9 @@ type RefundState =
   | { kind: 'refunded'; amount: number; at: number };
 ```
 
-- Roll-ups: `event → asset → brand`, and independently `event → user`. Compute
-  these as Convex queries; do not denormalize prematurely.
+- Roll-ups: `event → asset → brand → org`, and independently `event → user`
+  (within an org). Compute these as Convex queries; do not denormalize
+  prematurely.
 - **Refunds net out, never delete.** A refund is a state transition on the
   original event (or a linked reversing entry) so history stays auditable.
 - Writes that must be consistent (charge + refund reconciliation) go through a
@@ -135,16 +153,26 @@ type RefundState =
 
 ---
 
-## Open questions (resolve before the code depends on them)
+## Open questions
 
-1. **User identity** — how is the current editor identified per browser (SSO,
-   extension login, org directory)? Drives `userId`.
-2. **Asset identity** — how is the *same* asset recognized across users/tools?
-   Is there a shared project/asset id, or is it assigned in-app? Drives
-   `assetId` — the crux of cross-user aggregation.
-3. **Per-tool token signal** — exact request/response fields carrying the cost
-   number, per tool. Needs captured samples for Flow, Higgsfield, Kling.
-4. **Refund detection** — distinct event, balance delta, or inferred? Per tool.
-   Drives the `RefundState` transitions.
+Resolved for Higgsfield (see `docs/adr/` and `CONTEXT.md`):
+
+- ~~**User identity**~~ → our own extension login; tool seat kept as metadata
+  (ADR-0004).
+- ~~**Asset identity**~~ → Active Asset chosen in the popup and stamped on each
+  capture; no tool-side asset id exists (`project_id` is constant). A generation
+  with no Active Asset is recorded `unattributed` + flagged, then assigned in the
+  generation gallery.
+- **Higgsfield token signal** → `job_sets[].cost` on the `POST /fnf/jobs/{type}`
+  response (100 / 500 / 750 observed; `null` when free). Still to capture: does
+  `cost` scale with output count (batch)?
+
+Still open:
+
+- **Refund detection (all tools)** — deliberately parked behind Phase-1
+  discovery (ADR-0001). No failed/refunded generation has been captured yet; the
+  runtime flags such cases (ADR-0002) and the Discovery agent derives the rule
+  (ADR-0003). Needs captures for Flow and Kling too.
+- **Flow & Kling token signals** — need captured samples (Higgsfield done).
 
 Keep these in sync with `README.md`'s Status section.
