@@ -1,0 +1,14 @@
+{
+  "name": "@token-tracker/convex",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "convex dev",
+    "typecheck": "if [ -d convex/_generated ]; then tsc --noEmit; else echo '⚠ convex: skipping typecheck — run `pnpm dev:convex` once to generate convex/_generated/'; fi"
+  },
+  "dependencies": {
+    "@token-tracker/shared": "workspace:*",
+    "convex": "^1.17.0"
+  }
+}
