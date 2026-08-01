@@ -41,16 +41,27 @@ Usage signals are extracted from each tool's network activity.
 
 ## Status
 
-Early design. Key decisions still open:
+Design settled for **Higgsfield, Phase 1** (see `docs/adr/` and `CONTEXT.md`).
 
-1. **Architecture** — central backend (shared source of truth) vs. local-only
-   vs. a raw capture probe with server-side parsing. *Leaning: central backend*,
-   since a shared view and cross-user asset stitching need one.
-2. **User identity** — how the current editor is identified per browser.
-3. **Asset identity** — how the same asset is recognized across users/tools.
-4. **Token signal per tool** — where credit/token numbers appear in each tool's
-   network activity (Flow, Higgsfield, Kling).
-5. **Refund detection** — distinct event, balance delta, or inferred? Per tool.
+**Phase 1 = a capture probe** (ADR-0001): a WXT extension that observes all
+`fnf-api-gw.higgsfield.ai` traffic and logs it to Convex, so the unknown
+signals (refunds, batch cost) can be discovered before the structured model is
+built. Alongside it, a **generation gallery** shows each editor their
+generations (prompt + output media) per Asset, and lets them assign
+`unattributed` generations to an Asset.
+
+Decisions:
+
+1. **Architecture** — central Convex backend + capture-probe-first phasing
+   (ADR-0001).
+2. **User identity** — our own extension login, not the shared tool seat
+   (ADR-0004).
+3. **Asset identity** — Active Asset chosen in the popup; unattributed
+   generations are flagged and assigned later.
+4. **Token signal (Higgsfield)** — `job_sets[].cost` on the generate response.
+   Flow/Kling still need captures.
+5. **Refund detection** — parked behind discovery; the runtime flags rather than
+   guesses (ADR-0002), and an offline LangGraph agent derives the rule (ADR-0003).
 
 ## Tech
 

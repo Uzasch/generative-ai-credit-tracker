@@ -18,6 +18,15 @@ build/
 .env.*
 !.env.example
 
+# python
+.venv/
+**/.venv/
+__pycache__/
+
+# captured tool traffic — PII (emails, balances, prompts); keep local only.
+# Stripped fixtures for tests live under test dirs, not here.
+input/
+
 # misc
 .DS_Store
 *.log
