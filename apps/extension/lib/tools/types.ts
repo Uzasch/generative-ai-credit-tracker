@@ -42,6 +42,16 @@ export type ToolAdapter = {
   /** URL substrings that indicate a response worth inspecting. */
   matches: (url: string) => boolean;
   extract: (res: CapturedResponse) => ExtractedUsage | null;
+  /**
+   * Whether this capture is a **generate request** — the call a Generate click
+   * fires — decided from the request shape (method + URL) alone, independent of
+   * whether {@link extract} can read a structured event from the body. The click
+   * tripwire (#8) correlates observed Generate clicks against this so a request
+   * that errored still counts as "a request happened" (only a click with *no*
+   * request in the window is a `click-no-request` anomaly). Optional: a tool
+   * whose generate shape isn't known yet omits it.
+   */
+  isGenerateRequest?: (res: CapturedResponse) => boolean;
 };
 
 /**

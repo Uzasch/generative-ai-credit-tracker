@@ -46,6 +46,38 @@ function isRawCapture(value: unknown): value is RawCapture {
   );
 }
 
+/** Marker on runtime messages posted from the ISOLATED-world click tripwire. */
+export const GENERATE_CLICK_SOURCE = 'tt-generate-click' as const;
+
+/** Payload the tripwire reports for each observed Generate click. */
+export type GenerateClickPayload = {
+  /** Page host the click happened on (maps to a Tool in the background). */
+  host: string;
+  /** When the click fired, client ms epoch. */
+  clickedAt: number;
+};
+
+export type GenerateClickMessage = {
+  source: typeof GENERATE_CLICK_SOURCE;
+  payload: GenerateClickPayload;
+};
+
+/**
+ * Validate a runtime message as a well-formed Generate-click report. The tripwire
+ * runs in the ISOLATED world (it has `browser.runtime` and sends directly, no
+ * page-shared MAIN world), but we still fully validate the shape at the background
+ * trust boundary before acting on it (AGENTS.md §4).
+ */
+export function isGenerateClickMessage(data: unknown): data is GenerateClickMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const msg = data as { source?: unknown; payload?: unknown };
+  if (msg.source !== GENERATE_CLICK_SOURCE) return false;
+  const p = msg.payload;
+  if (typeof p !== 'object' || p === null) return false;
+  const payload = p as { host?: unknown; clickedAt?: unknown };
+  return typeof payload.host === 'string' && typeof payload.clickedAt === 'number';
+}
+
 /** Hosts the capture + bridge scripts run on. Keep in sync with wxt.config host_permissions. */
 export const TOOL_MATCHES = [
   'https://labs.google/*',

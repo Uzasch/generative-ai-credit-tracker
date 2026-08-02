@@ -29,6 +29,9 @@ export const higgsfieldAdapter: ToolAdapter = {
   tool: 'higgsfield',
   matches: (url) => url.includes('higgsfield.ai'),
   extract: (res): ExtractedUsage | null => extractGeneration(res) ?? extractStatus(res),
+  // Correlates Generate clicks against real generate POSTs (#8, click tripwire),
+  // by request shape only — a generate call that errored still counts as a request.
+  isGenerateRequest: (res) => isGenerateRequest(res),
 };
 
 /**

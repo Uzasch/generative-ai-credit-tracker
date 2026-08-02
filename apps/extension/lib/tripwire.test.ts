@@ -1,0 +1,86 @@
+import { describe, expect, it } from 'vitest';
+import { ClickRequestCorrelator, matchesGenerateLabel, toolFromHost } from './tripwire';
+
+const WINDOW = 4000;
+const HOST = 'higgsfield.ai';
+
+describe('ClickRequestCorrelator', () => {
+  it('a request within the window explains the click — nothing is flagged', () => {
+    const c = new ClickRequestCorrelator(WINDOW);
+    c.onClick({ host: HOST, clickedAt: 1000 });
+    // Request lands 2s after the click, inside the window.
+    expect(c.onGenerateRequest(3000)).toBe(true);
+    expect(c.sweepExpired(1000 + WINDOW + 1)).toEqual([]);
+    expect(c.pendingCount).toBe(0);
+  });
+
+  it('a click with no request is flagged once its window elapses', () => {
+    const c = new ClickRequestCorrelator(WINDOW);
+    const click = { host: HOST, clickedAt: 1000 };
+    c.onClick(click);
+    // Still inside the window — not yet flagged.
+    expect(c.sweepExpired(1000 + WINDOW)).toEqual([]);
+    // Past the window — flagged, and removed so it can't be flagged twice.
+    expect(c.sweepExpired(1000 + WINDOW + 1)).toEqual([click]);
+    expect(c.sweepExpired(9_999_999)).toEqual([]);
+  });
+
+  it('a request that arrives after the window does NOT explain the click', () => {
+    const c = new ClickRequestCorrelator(WINDOW);
+    c.onClick({ host: HOST, clickedAt: 1000 });
+    // Too late — this request belongs to no pending click.
+    expect(c.onGenerateRequest(1000 + WINDOW + 500)).toBe(false);
+    expect(c.pendingCount).toBe(1);
+  });
+
+  it('tolerates a request whose clock lands slightly before the click', () => {
+    const c = new ClickRequestCorrelator(WINDOW, 1000);
+    c.onClick({ host: HOST, clickedAt: 5000 });
+    // Request captured 800ms "before" the click due to clock skew — still matched.
+    expect(c.onGenerateRequest(4200)).toBe(true);
+    expect(c.pendingCount).toBe(0);
+  });
+
+  it('one request consumes the oldest click; the other still gets flagged', () => {
+    const c = new ClickRequestCorrelator(WINDOW);
+    const first = { host: HOST, clickedAt: 1000 };
+    const second = { host: HOST, clickedAt: 1500 };
+    c.onClick(first);
+    c.onClick(second);
+    // A single generate request explains only the oldest pending click.
+    expect(c.onGenerateRequest(2000)).toBe(true);
+    const flagged = c.sweepExpired(1500 + WINDOW + 1);
+    expect(flagged).toEqual([second]);
+  });
+
+  it('a request with no pending click is a harmless no-op', () => {
+    const c = new ClickRequestCorrelator(WINDOW);
+    expect(c.onGenerateRequest(1234)).toBe(false);
+  });
+});
+
+describe('toolFromHost', () => {
+  it('maps each tracked tool host to its Tool', () => {
+    expect(toolFromHost('higgsfield.ai')).toBe('higgsfield');
+    expect(toolFromHost('app.klingai.com')).toBe('kling');
+    expect(toolFromHost('labs.google')).toBe('flow');
+  });
+
+  it('returns null for an untracked host', () => {
+    expect(toolFromHost('example.com')).toBeNull();
+  });
+});
+
+describe('matchesGenerateLabel', () => {
+  it('matches Generate button labels', () => {
+    expect(matchesGenerateLabel('Generate')).toBe(true);
+    expect(matchesGenerateLabel('Generate video')).toBe(true);
+    expect(matchesGenerateLabel('Generate (100)')).toBe(true);
+  });
+
+  it('does not match Regenerate or unrelated labels', () => {
+    expect(matchesGenerateLabel('Regenerate')).toBe(false);
+    expect(matchesGenerateLabel('Download')).toBe(false);
+    expect(matchesGenerateLabel('')).toBe(false);
+  });
+});

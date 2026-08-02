@@ -101,6 +101,17 @@ export function isTool(value: unknown): value is Tool {
   return typeof value === 'string' && (TOOLS as readonly string[]).includes(value);
 }
 
+// Flagged anomalies (ADR-0002): the deterministic runtime records raw evidence
+// instead of guessing when it can't classify something. The discriminated
+// evidence union + the mutation input shape, shared by the extension (raises
+// them) and Convex (persists them into the org-scoped `flagged_anomalies` table).
+export {
+  type AnomalyEvidence,
+  type AnomalyKind,
+  type FlaggedAnomalyInput,
+  isAnomalyKind,
+} from './anomaly';
+
 // Attribution: the pure step that stamps a tool-extracted generation with the
 // editor's Active context, or flags it when no Active Asset is selected.
 export {
