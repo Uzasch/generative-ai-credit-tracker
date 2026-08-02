@@ -1,0 +1,9 @@
+{
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/0b836048-2df4-455d-b513-6d248d544fec",
+  "method": "GET",
+  "status": 200,
+  "body": {
+    "id": "0b836048-2df4-455d-b513-6d248d544fec",
+    "status": "in_progress"
+  }
+}

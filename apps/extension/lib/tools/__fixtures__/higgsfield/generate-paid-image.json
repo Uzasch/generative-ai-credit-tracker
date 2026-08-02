@@ -1,0 +1,28 @@
+{
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/v2/nano_banana_2_lite",
+  "method": "POST",
+  "status": 200,
+  "body": {
+    "id": "REDACTED_PROJECT",
+    "job_sets": [
+      {
+        "id": "c7d61713-24df-4195-85fd-e9846f092405",
+        "type": "nano_banana_2_lite",
+        "project_id": "REDACTED_PROJECT",
+        "cost": 100,
+        "params": {
+          "batch_size": 1,
+          "prompt": "2D hand-drawn cartoon YouTube thumbnail artwork, flat kids-animation style, NOT 3D, NOT photographic. A big friendly wide-eyed cartoon T-Rex mid playful roar as the hero, with two smaller cheerful cartoon dinosaurs beside it, each with a thick white sticker outline so they pop off the background. Bright saturated prehistoric background: vivid blue sky, lush green jungle, smoking volcano in the distance. Characters positioned on the right side, leaving clear empty sky space on the upper left. Cheerful and family-friendly, never scary. Absolutely NO text, NO letters, NO words, NO logos, NO numbers anywhere in the image."
+        },
+        "jobs": [
+          {
+            "id": "0b836048-2df4-455d-b513-6d248d544fec",
+            "status": "queued",
+            "user_id": "REDACTED_USER"
+          }
+        ]
+      }
+    ],
+    "has_more": false
+  }
+}

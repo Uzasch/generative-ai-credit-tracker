@@ -1,3 +1,4 @@
+import type { JobOutcome, RefundState, Tool } from '@token-tracker/shared';
 import { ConvexHttpClient } from 'convex/browser';
 import { type FunctionReference, makeFunctionReference } from 'convex/server';
 import type { RawCapture } from './tools';
@@ -13,6 +14,35 @@ const CONVEX_URL = import.meta.env.VITE_CONVEX_URL as string | undefined;
 const recordRawCapture = makeFunctionReference<'mutation'>(
   'rawCaptures:record',
 ) as FunctionReference<'mutation', 'public', RawCapture, string>;
+
+/**
+ * Arguments for the `events.record` mutation — the recorded generation event.
+ * Mirrors the mutation's validator: `jobs` and `refund` are optional (they
+ * default server-side) and `assetId` carries the `'unattributed'` sentinel as a
+ * plain string. Kept in sync with `packages/convex/convex/events.ts`.
+ */
+export type GenerationEventInput = {
+  organizationId: string;
+  userId: string;
+  tool: Tool;
+  brandId: string;
+  assetId: string;
+  prompt?: string;
+  cost: number;
+  jobs?: JobOutcome[];
+  refund?: RefundState;
+  capturedAt: number;
+  toolRef?: string;
+  toolAccount?: string;
+  ruleVersion: number;
+};
+
+const recordEvent = makeFunctionReference<'mutation'>('events:record') as FunctionReference<
+  'mutation',
+  'public',
+  GenerationEventInput,
+  string
+>;
 
 let client: ConvexHttpClient | null = null;
 function getClient(): ConvexHttpClient | null {
@@ -32,5 +62,19 @@ export async function appendRawCapture(capture: RawCapture): Promise<void> {
     await c.mutation(recordRawCapture, capture);
   } catch (err) {
     console.warn('[token-tracker] failed to append raw capture', err);
+  }
+}
+
+/** Record one generation event to Convex. Best-effort — never throws to the caller. */
+export async function recordGenerationEvent(event: GenerationEventInput): Promise<void> {
+  const c = getClient();
+  if (!c) {
+    console.warn('[token-tracker] VITE_CONVEX_URL not set — generation event dropped');
+    return;
+  }
+  try {
+    await c.mutation(recordEvent, event);
+  } catch (err) {
+    console.warn('[token-tracker] failed to record generation event', err);
   }
 }

@@ -1,0 +1,28 @@
+{
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/kling2-6",
+  "method": "POST",
+  "status": 200,
+  "body": {
+    "id": "REDACTED_PROJECT",
+    "job_sets": [
+      {
+        "id": "d06d1b93-8e54-458b-b1a3-548d9d4cc66e",
+        "type": "kling2_6",
+        "project_id": "REDACTED_PROJECT",
+        "cost": 500,
+        "params": {
+          "batch_size": null,
+          "prompt": "Rear tracking shot as <<<e12c2034-b87d-4384-a574-e215a397026c>>> walks on his <<<55a1fb7c-c772-4eef-84cc-1973a7a5b988>>> left side, holding her left hand, while she pushes the shopping cart with her right hand. They continue forward together toward the supermarket entrance. The automatic glass doors smoothly slide open as they approach, and both walk naturally inside without stopping. The cart rolls steadily beside the mother, with gentle wheel movement and subtle clothing motion.\nVibrant glossy CGI render, premium stylized family-film animation, exact <<<e12c2034-b87d-4384-a574-e215a397026c>>> and <<<55a1fb7c-c772-4eef-84cc-1973a7a5b988>>> character consistency, <<<55a1fb7c-c772-4eef-84cc-1973a7a5b988>>> remains significantly taller than <<<e12c2034-b87d-4384-a574-e215a397026c>>>, smooth realistic walking cycles, cinematic bright daylight transitioning into warm supermarket lighting, sharp focus, high-detail textures, controlled depth of field, no lip sync, no extra characters, no text, no logos, no deformation."
+        },
+        "jobs": [
+          {
+            "id": "b3473756-0857-4b76-b3e1-555e4da41614",
+            "status": "waiting",
+            "user_id": "REDACTED_USER"
+          }
+        ]
+      }
+    ],
+    "has_more": false
+  }
+}
