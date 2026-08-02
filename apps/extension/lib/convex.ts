@@ -1,4 +1,4 @@
-import type { JobOutcome, RefundState, Tool } from '@token-tracker/shared';
+import type { GenerationEvent, JobOutcome, RefundState } from '@token-tracker/shared';
 import { ConvexHttpClient } from 'convex/browser';
 import { type FunctionReference, makeFunctionReference } from 'convex/server';
 import type { RawCapture } from './tools';
@@ -16,25 +16,14 @@ const recordRawCapture = makeFunctionReference<'mutation'>(
 ) as FunctionReference<'mutation', 'public', RawCapture, string>;
 
 /**
- * Arguments for the `events.record` mutation — the recorded generation event.
- * Mirrors the mutation's validator: `jobs` and `refund` are optional (they
- * default server-side) and `assetId` carries the `'unattributed'` sentinel as a
- * plain string. Kept in sync with `packages/convex/convex/events.ts`.
+ * Arguments for the `events.record` mutation. Derived from the single source of
+ * truth for the event shape (`@token-tracker/shared`, AGENTS.md §6) — never
+ * re-declared. The mutation defaults `jobs` and `refund` server-side, so both
+ * are optional here.
  */
-export type GenerationEventInput = {
-  organizationId: string;
-  userId: string;
-  tool: Tool;
-  brandId: string;
-  assetId: string;
-  prompt?: string;
-  cost: number;
+export type GenerationEventInput = Omit<GenerationEvent, 'jobs' | 'refund'> & {
   jobs?: JobOutcome[];
   refund?: RefundState;
-  capturedAt: number;
-  toolRef?: string;
-  toolAccount?: string;
-  ruleVersion: number;
 };
 
 const recordEvent = makeFunctionReference<'mutation'>('events:record') as FunctionReference<

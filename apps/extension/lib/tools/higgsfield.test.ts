@@ -75,6 +75,38 @@ describe('higgsfieldAdapter.extract — responses it does not care about', () =>
   });
 });
 
+describe('higgsfieldAdapter.extract — deterministic recognition edges', () => {
+  it('rejects a generate-shaped body whose cost is neither a number nor null', () => {
+    const malformedCost: CapturedResponse = {
+      url: 'https://fnf-api-gw.higgsfield.ai/fnf/jobs/v2/nano_banana_2_lite',
+      method: 'POST',
+      status: 200,
+      body: { job_sets: [{ id: 'js_1', cost: 'gratis', params: { prompt: 'x' }, jobs: [] }] },
+    };
+    expect(higgsfieldAdapter.extract(malformedCost)).toBeNull();
+  });
+
+  it('returns null for POST /fnf/jobs/status-batch even when the body looks generate-shaped', () => {
+    const statusBatch: CapturedResponse = {
+      url: 'https://fnf-api-gw.higgsfield.ai/fnf/jobs/status-batch',
+      method: 'POST',
+      status: 200,
+      body: { job_sets: [{ id: 'js_1', cost: 100, params: { prompt: 'x' }, jobs: [] }] },
+    };
+    expect(higgsfieldAdapter.extract(statusBatch)).toBeNull();
+  });
+
+  it('returns null for a /fnf/tours response', () => {
+    const tours: CapturedResponse = {
+      url: 'https://fnf-api-gw.higgsfield.ai/fnf/tours',
+      method: 'GET',
+      status: 200,
+      body: { items: [] },
+    };
+    expect(higgsfieldAdapter.extract(tours)).toBeNull();
+  });
+});
+
 describe('extractUsage routes a Higgsfield generate to the higgsfield adapter', () => {
   it('tags the paid image usage as tool "higgsfield"', () => {
     const result = extractUsage(asResponse(paidImage));

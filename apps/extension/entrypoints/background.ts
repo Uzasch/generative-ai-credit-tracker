@@ -5,13 +5,16 @@ import { type CapturedResponse, extractUsage } from '@/lib/tools';
 /**
  * Stubbed attribution context. Real attribution — the Active Asset chosen in the
  * popup and `userId` from our own login (ADR-0004) — arrives in a later ticket.
- * Until then every event is recorded against a fixed context with an
- * `unattributed` asset so a real charge is never lost.
+ * Until then every event is recorded against this fixed context with an
+ * `unattributed` asset so a real charge is never lost. Swapping in real
+ * attribution is a single edit here.
  */
-const STUB_ORGANIZATION_ID = 'org_stub';
-const STUB_USER_ID = 'user_stub';
-const STUB_BRAND_ID = 'brand_stub';
-const UNATTRIBUTED_ASSET_ID = 'unattributed';
+const STUB_ATTRIBUTION = {
+  organizationId: 'org_stub',
+  userId: 'user_stub',
+  brandId: 'brand_stub',
+  assetId: 'unattributed',
+} as const;
 
 /**
  * Version of the detection rule that produced these events (ADR-0003). Bump when
@@ -56,11 +59,8 @@ export default defineBackground(() => {
     // recorded as `queued` — their freshly-created state on the generate
     // response; observed status transitions arrive via status polls later.
     void recordGenerationEvent({
-      organizationId: STUB_ORGANIZATION_ID,
-      userId: STUB_USER_ID,
+      ...STUB_ATTRIBUTION,
       tool: result.tool,
-      brandId: STUB_BRAND_ID,
-      assetId: UNATTRIBUTED_ASSET_ID,
       prompt: result.usage.prompt,
       cost: result.usage.cost,
       jobs: result.usage.jobIds.map((jobId) => ({ jobId, status: 'queued' as const })),
