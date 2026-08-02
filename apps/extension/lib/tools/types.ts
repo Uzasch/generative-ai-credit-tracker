@@ -43,6 +43,15 @@ export type ToolAdapter = {
 };
 
 export type ExtractedUsage = Pick<GenerationEvent, 'cost' | 'toolRef'> & {
+  /** The generation prompt when the response carries one. */
+  prompt?: string;
+  /**
+   * Child job ids of the generate response's job set — one per requested output
+   * (event = one Job set). Their status/result media are observed later via the
+   * tool's own status polls (a subsequent ticket); the adapter does not invent
+   * outcomes here (ADR-0002).
+   */
+  jobIds: string[];
   refund?: GenerationEvent['refund'];
   /** Best-effort asset hint from the tool, if present (e.g. a job/project id). */
   assetHint?: string;
