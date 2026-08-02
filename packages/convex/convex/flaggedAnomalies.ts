@@ -59,7 +59,16 @@ export const record = mutation({
     evidence: anomalyEvidence,
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert('flagged_anomalies', args);
+    // Denormalise the `unknown-status` job id to a top-level, indexable field so the
+    // live tracking indicator can reverse-look-up this anomaly by a generation's job
+    // ids (#18 review). That arm carries no `toolRef`, so the offending job is its
+    // only link back to the event, and Convex cannot index inside the `evidence`
+    // union — hence the hoist here at the write boundary. Derived server-side, so the
+    // caller's input contract (mirroring `FlaggedAnomalyInput`) stays unchanged. The
+    // matcher (`isEventFlagged`) still reads `evidence.jobId`; this copy only feeds
+    // the index.
+    const jobId = args.evidence.kind === 'unknown-status' ? args.evidence.jobId : undefined;
+    return await ctx.db.insert('flagged_anomalies', { ...args, jobId });
   },
 });
 

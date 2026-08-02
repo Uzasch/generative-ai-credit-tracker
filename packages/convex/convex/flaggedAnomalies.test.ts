@@ -98,6 +98,54 @@ test('records a cost-mismatch anomaly, keeping both cost numbers as evidence', a
   expect(rows[0]?.toolRef).toBe('jobset_7');
 });
 
+test('denormalises the unknown-status job id to a top-level indexable field (#18 review)', async () => {
+  // The `record` mutation hoists `evidence.jobId` to a top-level `jobId` so the live
+  // indicator can reverse-look-up the anomaly through `by_org_job_id` (an
+  // `unknown-status` anomaly carries no `toolRef`). Read it back via a raw table
+  // scan since `listByOrg` projects the row shape the Discovery agent consumes.
+  const t = convexTest(schema, modules);
+  await t.mutation(api.flaggedAnomalies.record, {
+    organizationId: ORG,
+    tool: 'higgsfield',
+    observedAt: 2000,
+    evidence: {
+      kind: 'unknown-status',
+      jobId: 'job_denorm',
+      rawStatus: 'quarantined',
+      sourceUrl: 'https://fnf-api-gw.higgsfield.ai/fnf/jobs/job_denorm',
+    },
+  });
+  // A non-unknown-status arm links by toolRef (or not at all) and must NOT carry a
+  // denormalised jobId.
+  await t.mutation(api.flaggedAnomalies.record, {
+    organizationId: ORG,
+    tool: 'higgsfield',
+    toolRef: 'jobset_click',
+    observedAt: 2001,
+    evidence: { kind: 'click-no-request', host: 'higgsfield.ai', clickedAt: 1, windowMs: 4000 },
+  });
+
+  const rows = await t.run(async (ctx) =>
+    ctx.db
+      .query('flagged_anomalies')
+      .withIndex('by_org_observed_at', (q) => q.eq('organizationId', ORG))
+      .collect(),
+  );
+  const unknown = rows.find((r) => r.evidence.kind === 'unknown-status');
+  const click = rows.find((r) => r.evidence.kind === 'click-no-request');
+  expect(unknown?.jobId).toBe('job_denorm');
+  expect(click?.jobId).toBeUndefined();
+
+  // And the index it feeds resolves the anomaly by that job id, org-scoped.
+  const byJob = await t.run(async (ctx) =>
+    ctx.db
+      .query('flagged_anomalies')
+      .withIndex('by_org_job_id', (q) => q.eq('organizationId', ORG).eq('jobId', 'job_denorm'))
+      .collect(),
+  );
+  expect(byJob).toHaveLength(1);
+});
+
 test('listByOrg returns newest-first', async () => {
   const t = convexTest(schema, modules);
   await t.mutation(api.flaggedAnomalies.record, {

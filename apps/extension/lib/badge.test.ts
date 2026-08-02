@@ -20,6 +20,34 @@ describe('pruneCaptures', () => {
     expect(pruned).toEqual([2000]);
     expect(times).toEqual([1000, 2000]);
   });
+
+  it('seeds the window from the successful-record time, not a stale capture time (#18 review)', () => {
+    // The badge window must be measured from when the event actually recorded, not
+    // from `capture.capturedAt` — a page-shared, possibly stale-or-spoofed client
+    // timestamp. Simulate a delayed/offline write whose capture time is already
+    // older than the whole window by the time it records.
+    const recordedAt = 1_000_000;
+    const staleCapturedAt = recordedAt - WINDOW - 1;
+    // Seeding off the stale capture time: it is already outside the window, so the
+    // badge would prune to empty the instant it painted (paint-then-clear bug).
+    expect(pruneCaptures([staleCapturedAt], recordedAt, WINDOW)).toEqual([]);
+    // Seeding off the record time keeps this just-recorded generation counted.
+    expect(pruneCaptures([recordedAt], recordedAt, WINDOW)).toEqual([recordedAt]);
+  });
+
+  it('a future capture timestamp no longer keeps the badge lit past the window (#18 review)', () => {
+    // A spoofed/future `capturedAt` seeded into the window would linger well beyond
+    // two minutes; the record time is always "now", so its decay is honest.
+    const recordedAt = 1_000_000;
+    const futureCapturedAt = recordedAt + 10 * WINDOW;
+    // If the future capture time were stored, it would still be "inside" the window
+    // long after the activity really happened.
+    expect(pruneCaptures([futureCapturedAt], recordedAt + WINDOW + 1, WINDOW)).toEqual([
+      futureCapturedAt,
+    ]);
+    // Seeded from the record time it ages out exactly one window later, as intended.
+    expect(pruneCaptures([recordedAt], recordedAt + WINDOW + 1, WINDOW)).toEqual([]);
+  });
 });
 
 describe('badgeText', () => {
