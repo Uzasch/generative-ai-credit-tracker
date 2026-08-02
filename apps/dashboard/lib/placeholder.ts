@@ -73,7 +73,9 @@ function synthetic(
     prompt,
     cost,
     refund,
-    media: [objectThumb(hue, glyph)],
+    // Synthetic thumbnails are inline SVG data URIs — still images (kind 'image');
+    // the projection tags real captures image|video from the media URL.
+    media: [{ url: objectThumb(hue, glyph), kind: 'image' }],
     jobCount,
     capturedAt: 0,
   };
@@ -113,7 +115,7 @@ export const PLACEHOLDER_FEED: GenerationView[] = [
     prompt: 'Synthetic prompt — filed study, catalogued last session',
     cost: 500,
     refund: { kind: 'none' },
-    media: [objectThumb(30, '❖')],
+    media: [{ url: objectThumb(30, '❖'), kind: 'image' }],
     jobCount: 1,
     capturedAt: 0,
   },

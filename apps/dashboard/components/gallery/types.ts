@@ -25,6 +25,14 @@ export type GalleryData = {
   intake: GenerationView[];
   /** The editor's accessioned (assigned) generations — the per-Editor feed. */
   feed: GenerationView[];
+  /**
+   * The currently-browsed Asset's generations across ALL editors in the org — the
+   * per-Asset collection view. Assets aggregate work across Users (CONTEXT.md), so
+   * this comes from the org-scoped per-Asset query (`generationsByAsset`), never a
+   * filter of the current editor's `feed` — which would wrongly hide other
+   * editors' generations for the same Asset.
+   */
+  assetGenerations: GenerationView[];
   /** Collections available as Assignment targets. */
   assets: GalleryAsset[];
   /** True while a backing query is still loading. */
@@ -35,4 +43,10 @@ export type GalleryData = {
    * state for the synthetic demo).
    */
   onAssign: (eventId: string, assetId: string) => void | Promise<void>;
+  /**
+   * Report which Asset the collection view is showing, so the container can fetch
+   * that Asset's generations (across all editors). Called as the browsed/target
+   * Asset changes; `null` when no collection is selected.
+   */
+  onViewAsset: (assetId: string | null) => void;
 };

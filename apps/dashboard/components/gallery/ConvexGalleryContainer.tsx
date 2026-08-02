@@ -2,12 +2,13 @@
 
 import {
   assignAssetRef,
+  generationsByAssetRef,
   generationsByUserRef,
   seedCatalogRef,
   unattributedGenerationsRef,
 } from '@/lib/convex';
 import { useMutation, useQuery } from 'convex/react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { GalleryView } from './GalleryView';
 import type { GalleryAsset } from './types';
 
@@ -51,6 +52,22 @@ export function ConvexGalleryContainer(): JSX.Element {
     generationsByUserRef,
     organizationId && userId ? { organizationId, userId } : 'skip',
   );
+
+  // The Asset the gallery's collection view is browsing, reported up from the
+  // presentational surface. The per-Asset view aggregates across ALL editors
+  // (Assets aggregate across Users — CONTEXT.md), so it reads the org-scoped
+  // `generationsByAsset` query — NOT a filter of this editor's feed, which would
+  // hide other editors' generations for the same Asset. Skip until an Asset is
+  // selected, and never pass the `'unattributed'` sentinel (that query refuses it;
+  // the intake tray covers unattributed work).
+  const [viewedAssetId, setViewedAssetId] = useState<string | null>(null);
+  const assetGenerations = useQuery(
+    generationsByAssetRef,
+    organizationId && viewedAssetId && viewedAssetId !== 'unattributed'
+      ? { organizationId, assetId: viewedAssetId }
+      : 'skip',
+  );
+
   const assign = useMutation(assignAssetRef);
 
   const onAssign = useCallback(
@@ -67,9 +84,11 @@ export function ConvexGalleryContainer(): JSX.Element {
       editorName={editor?.displayName ?? 'Loading…'}
       intake={intake ?? []}
       feed={feed ?? []}
+      assetGenerations={assetGenerations ?? []}
       assets={assets}
       loading={catalog === undefined || intake === undefined || feed === undefined}
       onAssign={onAssign}
+      onViewAsset={setViewedAssetId}
     />
   );
 }

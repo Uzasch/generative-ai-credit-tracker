@@ -8,7 +8,7 @@ import {
   PLACEHOLDER_INTAKE,
   PLACEHOLDER_ORG,
 } from '@/lib/placeholder';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { GalleryView } from './GalleryView';
 
 /**
@@ -22,6 +22,16 @@ import { GalleryView } from './GalleryView';
 export function SyntheticGalleryContainer(): JSX.Element {
   const [intake, setIntake] = useState<GenerationView[]>(PLACEHOLDER_INTAKE);
   const [feed, setFeed] = useState<GenerationView[]>(PLACEHOLDER_FEED);
+
+  // The collection view aggregates an Asset's generations across all editors. The
+  // synthetic surface has a single editor, so its "all editors" is just the feed
+  // filtered to the browsed Asset (reported up via onViewAsset) — mirroring what
+  // the Convex container gets from the org-scoped `generationsByAsset` query.
+  const [viewedAssetId, setViewedAssetId] = useState<string | null>(null);
+  const assetGenerations = useMemo(
+    () => feed.filter((g) => g.assetId === viewedAssetId),
+    [feed, viewedAssetId],
+  );
 
   const onAssign = useCallback((eventId: string, assetId: string) => {
     setIntake((tray) => {
@@ -40,9 +50,11 @@ export function SyntheticGalleryContainer(): JSX.Element {
       editorName={PLACEHOLDER_EDITOR}
       intake={intake}
       feed={feed}
+      assetGenerations={assetGenerations}
       assets={PLACEHOLDER_ASSETS}
       loading={false}
       onAssign={onAssign}
+      onViewAsset={setViewedAssetId}
     />
   );
 }

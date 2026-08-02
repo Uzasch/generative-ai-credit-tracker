@@ -1,4 +1,4 @@
-import type { GenerationEvent, SeedCatalog } from '@token-tracker/shared';
+import type { GenerationEvent, ResultMedia, SeedCatalog } from '@token-tracker/shared';
 import { type FunctionReference, makeFunctionReference } from 'convex/server';
 
 /**
@@ -27,8 +27,12 @@ export type GenerationView = Pick<
 > & {
   /** Event id — the Assignment target passed back to `assignAsset`. */
   id: string;
-  /** Result media URLs — one per completed job that produced its output. */
-  media: string[];
+  /**
+   * Result media — one per completed job that produced its output, each tagged
+   * `image` or `video` (mirrors the convex `toGenerationView` projection) so the
+   * gallery renders `<video>` vs `<img>` from an explicit kind, not the URL.
+   */
+  media: ResultMedia[];
   /** Total jobs in the set, so the UI can show "N of M rendered". */
   jobCount: number;
 };

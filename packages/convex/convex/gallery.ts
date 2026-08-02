@@ -1,4 +1,11 @@
-import type { AssignmentState, JobOutcome, RefundState, Tool } from '@token-tracker/shared';
+import {
+  type AssignmentState,
+  type JobOutcome,
+  type RefundState,
+  type ResultMedia,
+  type Tool,
+  mediaKindOf,
+} from '@token-tracker/shared';
 
 /**
  * Pure view projection for the Generation Gallery (issue #7). Kept side-effect
@@ -55,8 +62,13 @@ export type GenerationView = {
    * tray/ledger total once a generation is refunded.
    */
   refund: RefundState;
-  /** Result media URLs — one per completed job that has produced its output. */
-  media: string[];
+  /**
+   * Result media — one per completed job that has produced its output, each
+   * tagged `image` or `video` so the gallery renders `<video>` vs `<img>` from an
+   * explicit kind (a video URL in an `<img>` shows a broken object). The kind is
+   * derived from the URL here, once, because a `JobOutcome` carries no media type.
+   */
+  media: ResultMedia[];
   /** Total jobs in the set, so the UI can show "N of M rendered". */
   jobCount: number;
   capturedAt: number;
@@ -68,14 +80,16 @@ export type GenerationView = {
  * before its `results.raw.url` arrived (issue #4) contributes nothing until a
  * later poll attaches the URL.
  */
-export function resultMedia(jobs: readonly JobOutcome[]): string[] {
-  const urls: string[] = [];
+export function resultMedia(jobs: readonly JobOutcome[]): ResultMedia[] {
+  const media: ResultMedia[] = [];
   for (const job of jobs) {
     if (job.status === 'completed' && job.mediaUrl !== undefined) {
-      urls.push(job.mediaUrl);
+      // Classify image vs video at the projection edge (the job carries only the
+      // URL, no media type), so renderers switch on an explicit kind.
+      media.push({ url: job.mediaUrl, kind: mediaKindOf(job.mediaUrl) });
     }
   }
-  return urls;
+  return media;
 }
 
 /** Project one stored event into the gallery's read-only view shape. */

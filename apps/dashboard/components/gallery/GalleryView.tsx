@@ -2,6 +2,7 @@
 
 import type { GenerationView } from '@/lib/convex';
 import { netCost, toCredits } from '@/lib/credits';
+import type { ResultMedia } from '@token-tracker/shared';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -41,7 +42,17 @@ function creditsOf(events: readonly GenerationView[]): string {
 }
 
 export function GalleryView(data: GalleryData): JSX.Element {
-  const { intake, feed, assets, onAssign, loading, editorName, organizationName } = data;
+  const {
+    intake,
+    feed,
+    assetGenerations,
+    assets,
+    onAssign,
+    onViewAsset,
+    loading,
+    editorName,
+    organizationName,
+  } = data;
 
   // The object currently under the loupe, and the collection the stamp will file
   // it into. Both are keyed by id so they survive the tray reordering as items
@@ -75,6 +86,14 @@ export function GalleryView(data: GalleryData): JSX.Element {
     if (targetAssetId !== null && assets.some((a) => a.assetId === targetAssetId)) return;
     setTargetAssetId(assets[0]?.assetId ?? null);
   }, [assets, targetAssetId]);
+
+  // Tell the container which collection is on screen so it can fetch that Asset's
+  // generations across ALL editors (Assets aggregate across Users — CONTEXT.md).
+  // The browse view below renders that org-scoped result, not a filter of this
+  // editor's feed (which would hide other editors' work for the same Asset).
+  useEffect(() => {
+    onViewAsset(targetAssetId);
+  }, [targetAssetId, onViewAsset]);
 
   // After a keyboard-driven selection change, follow focus to the new object.
   useEffect(() => {
@@ -229,9 +248,13 @@ export function GalleryView(data: GalleryData): JSX.Element {
             onStamp={(asset) => stampInto(asset, false)}
           />
 
+          {/* The Asset collection view shows EVERY editor's generations for this
+              Asset (org-scoped `generationsByAssetRef`, wired in the container),
+              not a filter of this editor's feed — Assets aggregate across Users
+              (CONTEXT.md). The per-editor feed/intake stay editor-scoped above. */}
           <CollectionContents
             asset={assets.find((a) => a.assetId === targetAssetId)}
-            events={feed.filter((e) => e.assetId === targetAssetId)}
+            events={assetGenerations}
           />
         </main>
 
@@ -345,11 +368,7 @@ function IntakeObject({
       <span className="block aspect-[4/3] overflow-hidden rounded bg-graphite">
         {thumb ? (
           // Result media, rendered as an accessioned object under raking light.
-          <img
-            src={thumb}
-            alt={event.prompt ?? 'Result media'}
-            className="h-full w-full object-cover"
-          />
+          <ResultThumb media={thumb} alt={event.prompt ?? 'Result media'} />
         ) : (
           <span className="flex h-full items-center justify-center text-xs text-manila-dim">
             {event.jobCount} job{event.jobCount === 1 ? '' : 's'} rendering…
@@ -370,6 +389,32 @@ function IntakeObject({
       </span>
     </button>
   );
+}
+
+/**
+ * One Result media output under raking light. A video generation's `mediaUrl`
+ * points at a video file (e.g. `.mp4`), so it must render in a `<video>` — an
+ * `<img>` shows a broken object. The image/video kind is decided once at the
+ * projection edge (`mediaKindOf` in the convex `toGenerationView`), so this only
+ * switches on the explicit `media.kind`, never re-sniffs the URL. The video is
+ * muted/inline and not autoplayed — a passive thumbnail; no poster frame is
+ * available since the projection carries only the media URL.
+ */
+function ResultThumb({ media, alt }: { media: ResultMedia; alt: string }): JSX.Element {
+  if (media.kind === 'video') {
+    return (
+      <video
+        src={media.url}
+        className="h-full w-full object-cover"
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        aria-label={alt}
+      />
+    );
+  }
+  return <img src={media.url} alt={alt} className="h-full w-full object-cover" />;
 }
 
 // --- Collections rail ---------------------------------------------------------
@@ -454,11 +499,7 @@ function CollectionContents({
             >
               <div className="aspect-[4/3] overflow-hidden rounded bg-graphite">
                 {event.media[0] ? (
-                  <img
-                    src={event.media[0]}
-                    alt={event.prompt ?? 'Result media'}
-                    className="h-full w-full object-cover"
-                  />
+                  <ResultThumb media={event.media[0]} alt={event.prompt ?? 'Result media'} />
                 ) : null}
               </div>
               <p className="mt-2 line-clamp-2 text-sm text-manila">{event.prompt ?? 'No prompt'}</p>

@@ -520,7 +520,7 @@ test('generationsByUser returns the editor feed as prompt + Result media + Cost'
   expect(feed[0]).toMatchObject({
     prompt: 'a raking-light still life',
     cost: 100,
-    media: ['https://cdn/j1.png'],
+    media: [{ url: 'https://cdn/j1.png', kind: 'image' }],
     jobCount: 1,
   });
 });
@@ -540,6 +540,48 @@ test('generationsByAsset lists an Asset feed and refuses the unattributed sentin
   await expect(
     t.query(api.events.generationsByAsset, { organizationId: ORG, assetId: 'unattributed' }),
   ).rejects.toThrow(/not an Asset/);
+});
+
+test('generationsByAsset aggregates an Asset across editors, not just the querying one', async () => {
+  // Assets aggregate work ACROSS Users (CONTEXT.md): the per-Asset collection view
+  // must include EVERY editor's generations for that Asset, not only the current
+  // editor's. This guards the gallery regression where the Asset view filtered one
+  // editor's feed and so hid other editors' generations for the same Asset.
+  const t = convexTest(schema, modules);
+  await t.mutation(
+    api.events.record,
+    eventArgs({ userId: 'editor_ada', assetId: 'asset_shared', cost: 100 }),
+  );
+  await t.mutation(
+    api.events.record,
+    eventArgs({ userId: 'editor_bo', assetId: 'asset_shared', cost: 500 }),
+  );
+
+  const feed = await t.query(api.events.generationsByAsset, {
+    organizationId: ORG,
+    assetId: 'asset_shared',
+  });
+  expect(feed).toHaveLength(2);
+  expect(new Set(feed.map((g) => g.userId))).toEqual(new Set(['editor_ada', 'editor_bo']));
+});
+
+test('generationsByAsset stays org-scoped — a different org’s Asset events never leak in', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(
+    api.events.record,
+    eventArgs({ organizationId: ORG, assetId: 'asset_shared', cost: 100 }),
+  );
+  await t.mutation(
+    api.events.record,
+    eventArgs({ organizationId: 'org_other', assetId: 'asset_shared', cost: 999 }),
+  );
+
+  const feed = await t.query(api.events.generationsByAsset, {
+    organizationId: ORG,
+    assetId: 'asset_shared',
+  });
+  expect(feed).toHaveLength(1);
+  expect(feed[0]?.cost).toBe(100);
 });
 
 test('the gallery projection carries refund state so a refunded generation can net out', async () => {

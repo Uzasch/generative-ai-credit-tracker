@@ -6,12 +6,27 @@ import { type GalleryEventInput, resultMedia, toGenerationView } from './gallery
 // that wrap these live in `events.ts` and are exercised by the convex-test
 // integration suite (which needs `convex/_generated`).
 
-test('resultMedia collects the url of every completed job, in order', () => {
+test('resultMedia collects each completed job, tagging image vs video by URL', () => {
+  // A video generation's `mediaUrl` ends `.mp4`; an image's `.png`. The kind is
+  // classified here at the projection edge so the gallery renders <video> vs
+  // <img> from an explicit discriminator (a video in an <img> shows broken).
   const jobs: JobOutcome[] = [
     { jobId: 'a', status: 'completed', mediaUrl: 'https://cdn/a.png' },
     { jobId: 'b', status: 'completed', mediaUrl: 'https://cdn/b.mp4' },
   ];
-  expect(resultMedia(jobs)).toEqual(['https://cdn/a.png', 'https://cdn/b.mp4']);
+  expect(resultMedia(jobs)).toEqual([
+    { url: 'https://cdn/a.png', kind: 'image' },
+    { url: 'https://cdn/b.mp4', kind: 'video' },
+  ]);
+});
+
+test('resultMedia classifies a video even behind a signed query string', () => {
+  // Real result URLs are signed; the extension only ever sees the URL, so the
+  // classifier must strip the query before matching the extension.
+  const jobs: JobOutcome[] = [
+    { jobId: 'a', status: 'completed', mediaUrl: 'https://cdn/clip.mp4?token=abc&x=1' },
+  ];
+  expect(resultMedia(jobs)).toEqual([{ url: 'https://cdn/clip.mp4?token=abc&x=1', kind: 'video' }]);
 });
 
 test('resultMedia skips a completed job that has no media url yet', () => {
@@ -21,7 +36,7 @@ test('resultMedia skips a completed job that has no media url yet', () => {
     { jobId: 'a', status: 'completed' },
     { jobId: 'b', status: 'completed', mediaUrl: 'https://cdn/b.png' },
   ];
-  expect(resultMedia(jobs)).toEqual(['https://cdn/b.png']);
+  expect(resultMedia(jobs)).toEqual([{ url: 'https://cdn/b.png', kind: 'image' }]);
 });
 
 test('resultMedia yields no media for in-flight or failed jobs', () => {
@@ -63,7 +78,7 @@ test('toGenerationView projects prompt, Cost, and Result media onto the view', (
     prompt: 'a raking-light still life',
     cost: 100,
     refund: { kind: 'none' },
-    media: ['https://cdn/j1.png'],
+    media: [{ url: 'https://cdn/j1.png', kind: 'image' }],
     jobCount: 1,
     capturedAt: 5,
   });
@@ -100,5 +115,5 @@ test('toGenerationView reports jobCount independent of how many jobs have media'
     ],
   });
   expect(view.jobCount).toBe(2);
-  expect(view.media).toEqual(['https://cdn/j1.png']);
+  expect(view.media).toEqual([{ url: 'https://cdn/j1.png', kind: 'image' }]);
 });
