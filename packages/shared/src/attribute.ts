@@ -40,36 +40,41 @@ export type ActiveContext = {
 /**
  * A generation the deterministic runtime could not fully classify, recorded
  * with its evidence rather than guessed (ADR-0002, CONTEXT.md "Flagged
- * anomaly"). For issue #5 the only kind is `'needs-assignment'`: a real charge
- * captured with no Active Asset. The charge is never lost — the fully-stamped
- * `event` (with the `'unattributed'` asset sentinel) rides along and is what
- * gets recorded, so an editor can later assign it to an Asset from the gallery.
+ * anomaly"): a Generate click with no matching request, a cancelled request, an
+ * unknown Job status, or a Cost that disagrees with the button — inputs to the
+ * Discovery agent (ADR-0003), *not* the same thing as an unattributed
+ * generation, which is a real {@link GenerationEvent} resolved by Assignment.
+ *
+ * This is the declared second arm of the ticket-05 signature and the seam those
+ * classifiers will plug into; #5 itself wires no anomaly trigger, so `attribute`
+ * does not yet construct one.
  */
 export type FlaggedAnomaly = {
-  kind: 'needs-assignment';
-  /** Human-readable explanation of why this generation could not be attributed. */
+  /** Why the runtime could not classify this generation. */
   reason: string;
-  /** The underlying generation event, stamped `unattributed`. Never discarded. */
-  event: GenerationEvent;
+  /** The raw extracted signal, retained as evidence rather than guessed (ADR-0002). */
+  evidence: ExtractedGeneration;
 };
 
 /**
  * Attribute a tool-extracted generation to the editor's Active context.
  *
- * With an Active Asset selected, the result is a fully-stamped
- * {@link GenerationEvent}. With none, the result is a {@link FlaggedAnomaly} of
- * kind `'needs-assignment'` whose `event.assetId` is the `'unattributed'`
- * sentinel — the charge still rolls up to its Brand and Organization but to no
- * Asset until assigned (CONTEXT.md "Assignment"). Pure: no I/O, no clock.
+ * With an Active Asset selected, the event carries it. With none, the event's
+ * `assetId` is the `'unattributed'` sentinel: the charge still rolls up to its
+ * Brand and Organization but to no Asset, and the sentinel is itself the
+ * needs-assignment flag an editor later resolves via Assignment (CONTEXT.md).
+ * Either way the result is a real {@link GenerationEvent} — an unattributed
+ * generation is not a {@link FlaggedAnomaly}. Pure: no I/O, no clock.
  */
 export function attribute(
   extracted: ExtractedGeneration,
   ctx: ActiveContext,
 ): GenerationEvent | FlaggedAnomaly {
-  const event: GenerationEvent = {
+  return {
     organizationId: ctx.organizationId,
     userId: ctx.userId,
     brandId: ctx.brandId,
+    // `null` Active Asset ⇒ the `'unattributed'` sentinel = the needs-assignment flag.
     assetId: ctx.assetId ?? 'unattributed',
     tool: extracted.tool,
     cost: extracted.cost,
@@ -81,21 +86,14 @@ export function attribute(
     toolAccount: ctx.toolAccount,
     ruleVersion: extracted.ruleVersion,
   };
-
-  if (ctx.assetId === null) {
-    return {
-      kind: 'needs-assignment',
-      reason: 'No Active Asset was selected when this generation was captured.',
-      event,
-    };
-  }
-
-  return event;
 }
 
-/** Narrow an {@link attribute} result to the flagged-anomaly branch. */
+/**
+ * Narrow an {@link attribute} result to the flagged-anomaly arm — evidence for
+ * the Discovery agent, never recorded as a billable event.
+ */
 export function isFlaggedAnomaly(
   result: GenerationEvent | FlaggedAnomaly,
 ): result is FlaggedAnomaly {
-  return 'kind' in result;
+  return 'evidence' in result;
 }

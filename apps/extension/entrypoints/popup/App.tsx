@@ -12,7 +12,10 @@ import { type ReactNode, useEffect, useState } from 'react';
  * Asset; with none selected, generations are recorded `unattributed`.
  *
  * The seed catalog is served read-only by Convex (`seed:catalog`); real Org /
- * Brand / Asset / User CRUD is out of scope for this ticket.
+ * Brand / Asset / User CRUD is out of scope for this ticket. The pickers are
+ * native labelled controls (accessible by default, AGENTS.md §7); adopting the
+ * shadcn `Select`/`Button` components is deferred until that component library
+ * is set up in the extension.
  */
 export function App() {
   const catalog = useQuery(seedCatalogRef);
@@ -76,7 +79,7 @@ export function App() {
   if (catalog === undefined) {
     return (
       <main className="p-4">
-        <p className="text-sm text-gray-500">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </main>
     );
   }
@@ -94,26 +97,27 @@ export function App() {
   }
 
   return (
-    <main className="p-4 space-y-4 w-72">
+    <main className="w-72 space-y-4 p-4">
       <header className="space-y-1">
         <h1 className="text-base font-semibold">Token Tracker</h1>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground">
           Generations are attributed to you and your Active Asset.
         </p>
       </header>
 
-      {/* Prominent Active Asset banner. */}
+      {/* Prominent Active Asset banner — a heavy solid border + emphasis when set,
+          a dashed muted outline when not. */}
       <section
         aria-label="Active Asset"
         className={`rounded-md border-2 p-3 ${
-          asset ? 'border-blue-500 bg-blue-50' : 'border-dashed border-gray-300 bg-gray-50'
+          asset ? 'border-primary bg-primary/10' : 'border-dashed border-muted-foreground/40'
         }`}
       >
-        <p className="text-xs uppercase tracking-wide text-gray-500">Active Asset</p>
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">Active Asset</p>
         {asset ? (
-          <p className="text-sm font-semibold text-blue-900">{asset.name}</p>
+          <p className="text-sm font-semibold text-foreground">{asset.name}</p>
         ) : (
-          <p className="text-sm font-medium text-gray-600">
+          <p className="text-sm font-medium text-muted-foreground">
             None — generations will be recorded <span className="font-semibold">unattributed</span>{' '}
             and flagged for assignment.
           </p>
@@ -121,72 +125,64 @@ export function App() {
       </section>
 
       <div className="space-y-3">
-        <Field id="user" label="Editor (our login)">
-          <select
-            id="user"
-            className="w-full rounded border border-gray-300 bg-white p-1.5 text-sm"
-            value={userId ?? ''}
-            onChange={(e) => setUserId(e.target.value || null)}
-          >
-            {catalog.users.map((u) => (
-              <option key={u.userId} value={u.userId}>
-                {u.displayName}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <SelectField
+          id="user"
+          label="Editor (our login)"
+          value={userId ?? ''}
+          onChange={(v) => setUserId(v || null)}
+        >
+          {catalog.users.map((u) => (
+            <option key={u.userId} value={u.userId}>
+              {u.displayName}
+            </option>
+          ))}
+        </SelectField>
 
-        <Field id="org" label="Organization">
-          <select
-            id="org"
-            className="w-full rounded border border-gray-300 bg-white p-1.5 text-sm"
-            value={organizationId ?? ''}
-            onChange={(e) => selectOrg(e.target.value)}
-          >
-            {catalog.orgs.map((o) => (
-              <option key={o.organizationId} value={o.organizationId}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <SelectField
+          id="org"
+          label="Organization"
+          value={organizationId ?? ''}
+          onChange={selectOrg}
+        >
+          {catalog.orgs.map((o) => (
+            <option key={o.organizationId} value={o.organizationId}>
+              {o.name}
+            </option>
+          ))}
+        </SelectField>
 
-        <Field id="brand" label="Brand">
-          <select
-            id="brand"
-            className="w-full rounded border border-gray-300 bg-white p-1.5 text-sm"
-            value={brandId ?? ''}
-            onChange={(e) => selectBrand(e.target.value)}
-            disabled={!org}
-          >
-            {org?.brands.map((b) => (
-              <option key={b.brandId} value={b.brandId}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <SelectField
+          id="brand"
+          label="Brand"
+          value={brandId ?? ''}
+          onChange={selectBrand}
+          disabled={!org}
+        >
+          {org?.brands.map((b) => (
+            <option key={b.brandId} value={b.brandId}>
+              {b.name}
+            </option>
+          ))}
+        </SelectField>
 
-        <Field id="asset" label="Active Asset">
-          <select
-            id="asset"
-            className="w-full rounded border border-gray-300 bg-white p-1.5 text-sm"
-            value={assetId ?? ''}
-            onChange={(e) => setAssetId(e.target.value || null)}
-            disabled={!brand}
-          >
-            <option value="">— None (unattributed) —</option>
-            {brand?.assets.map((a) => (
-              <option key={a.assetId} value={a.assetId}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <SelectField
+          id="asset"
+          label="Active Asset"
+          value={assetId ?? ''}
+          onChange={(v) => setAssetId(v || null)}
+          disabled={!brand}
+        >
+          <option value="">— None (unattributed) —</option>
+          {brand?.assets.map((a) => (
+            <option key={a.assetId} value={a.assetId}>
+              {a.name}
+            </option>
+          ))}
+        </SelectField>
 
         <button
           type="button"
-          className="text-xs text-gray-500 underline disabled:no-underline disabled:opacity-50"
+          className="text-xs text-muted-foreground underline disabled:no-underline disabled:opacity-50"
           onClick={() => setAssetId(null)}
           disabled={assetId === null}
         >
@@ -197,14 +193,24 @@ export function App() {
   );
 }
 
-/** A labelled form control — labelled and keyboard-navigable by default (AGENTS.md §7). */
-function Field({
+/**
+ * A labelled native `<select>` — labelled and keyboard-navigable by default
+ * (AGENTS.md §7). `onChange` hands back the raw selected value; the caller maps
+ * it (e.g. the empty string ⇒ no Active Asset).
+ */
+function SelectField({
   id,
   label,
+  value,
+  onChange,
+  disabled,
   children,
 }: {
   id: string;
   label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -212,7 +218,15 @@ function Field({
       <label htmlFor={id} className="block text-xs font-medium">
         {label}
       </label>
-      {children}
+      <select
+        id={id}
+        className="w-full rounded border border-input bg-background p-1.5 text-sm disabled:opacity-50"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      >
+        {children}
+      </select>
     </div>
   );
 }

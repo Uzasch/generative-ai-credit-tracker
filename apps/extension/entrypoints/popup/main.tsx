@@ -20,7 +20,7 @@ ReactDOM.createRoot(root).render(
     ) : (
       <main className="p-4 space-y-2">
         <h1 className="text-base font-semibold">Token Tracker</h1>
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-destructive">
           <code>VITE_CONVEX_URL</code> is not set — run the Convex dev deployment and rebuild the
           extension to pick your Active Asset.
         </p>

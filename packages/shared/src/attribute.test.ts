@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   type ActiveContext,
   type ExtractedGeneration,
+  type FlaggedAnomaly,
   attribute,
   isFlaggedAnomaly,
 } from './attribute';
+import type { GenerationEvent } from './index';
 
 /** A representative Higgsfield extraction: a paid image generation, two jobs. */
 const extracted: ExtractedGeneration = {
@@ -54,23 +56,24 @@ describe('attribute', () => {
     });
   });
 
-  it('with no Active Asset ⇒ a needs-assignment FlaggedAnomaly wrapping an unattributed event', () => {
+  it('with no Active Asset ⇒ an unattributed GenerationEvent (the sentinel is the needs-assignment flag)', () => {
     const noAsset: ActiveContext = { ...withAsset, assetId: null };
 
     const result = attribute(extracted, noAsset);
 
-    expect(isFlaggedAnomaly(result)).toBe(true);
-    if (!isFlaggedAnomaly(result)) throw new Error('expected a FlaggedAnomaly');
+    // An unattributed generation is a real event, NOT a Flagged anomaly
+    // (CONTEXT.md distinguishes the two).
+    expect(isFlaggedAnomaly(result)).toBe(false);
+    if (isFlaggedAnomaly(result)) throw new Error('expected a GenerationEvent');
 
-    expect(result.kind).toBe('needs-assignment');
-    expect(result.reason).toMatch(/active asset/i);
-    // The charge is never lost: the flagged anomaly carries the real event.
-    expect(result.event.assetId).toBe('unattributed');
-    expect(result.event.cost).toBe(500);
+    // `'unattributed'` is the flag: the charge is recorded, rolls up to Brand +
+    // Org, and is later resolved by Assignment.
+    expect(result.assetId).toBe('unattributed');
+    expect(result.cost).toBe(500);
     // Identity and brand are still stamped — only the asset is missing.
-    expect(result.event.organizationId).toBe('org_1');
-    expect(result.event.userId).toBe('user_ada');
-    expect(result.event.brandId).toBe('brand_acme');
+    expect(result.organizationId).toBe('org_1');
+    expect(result.userId).toBe('user_ada');
+    expect(result.brandId).toBe('brand_acme');
   });
 
   it('maps every extracted job id to a freshly-queued job (ADR-0002: outcomes are observed later, not invented)', () => {
@@ -99,5 +102,18 @@ describe('attribute', () => {
     const result = attribute(extracted, withoutSeat);
     if (isFlaggedAnomaly(result)) throw new Error('expected a GenerationEvent');
     expect(result.toolAccount).toBeUndefined();
+  });
+});
+
+describe('isFlaggedAnomaly', () => {
+  it('discriminates a Flagged anomaly (Discovery-bound evidence) from a GenerationEvent', () => {
+    const anomaly: FlaggedAnomaly = {
+      reason: 'cost disagreed with the button',
+      evidence: extracted,
+    };
+    const event = attribute(extracted, withAsset) as GenerationEvent;
+
+    expect(isFlaggedAnomaly(anomaly)).toBe(true);
+    expect(isFlaggedAnomaly(event)).toBe(false);
   });
 });

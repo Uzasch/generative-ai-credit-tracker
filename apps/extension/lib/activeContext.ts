@@ -22,8 +22,3 @@ export function loadActiveContext(): Promise<ActiveContext | null> {
 export function saveActiveContext(ctx: ActiveContext): Promise<void> {
   return activeContextItem.setValue(ctx);
 }
-
-/** Subscribe to Active-context changes; returns an unsubscribe function. */
-export function watchActiveContext(cb: (ctx: ActiveContext | null) => void): () => void {
-  return activeContextItem.watch(cb);
-}

@@ -55,12 +55,16 @@ export default defineBackground(() => {
  *
  * The context (identity + Active Asset) is established by the editor in the popup
  * (ADR-0004). With an Active Asset the event carries it; with none, `attribute`
- * yields a `needs-assignment` flagged anomaly whose event is `unattributed` — we
- * still record that event so a real charge is never lost (spec story 4), and the
- * `unattributed` asset is itself the signal the editor later resolves via
- * assignment (CONTEXT.md). Before the editor has set up any context at all, the
- * verbatim raw capture already retained above is the safety net (ADR-0001), so we
- * skip structured recording rather than inventing an Organization or User.
+ * returns an `unattributed` event — still recorded, so a real charge is never
+ * lost (spec story 4), with the `'unattributed'` asset the signal the editor
+ * later resolves via Assignment (CONTEXT.md).
+ *
+ * Before the editor has set up any context at all, the verbatim raw capture
+ * already retained above is the durable, replayable record of the charge
+ * (ADR-0001) — we skip structured recording rather than invent an Organization
+ * or User, since every event is scoped to exactly one real Organization
+ * (ADR-0004). The popup persists a default context on first open, so this only
+ * affects generations captured before the popup is ever opened.
  */
 async function attributeAndRecord(
   tool: Tool,
@@ -90,10 +94,14 @@ async function attributeAndRecord(
 
   const outcome = attribute(extracted, ctx);
   if (isFlaggedAnomaly(outcome)) {
-    console.warn(`[token-tracker] generation flagged (${outcome.kind}): ${outcome.reason}`);
-    void recordGenerationEvent(outcome.event);
+    // A genuine Flagged anomaly is evidence for the Discovery agent, not a
+    // billable event; the raw capture retained above is its record (ADR-0001).
+    // #5 wires no anomaly trigger, so attribute() does not produce one yet.
+    console.warn(`[token-tracker] flagged anomaly (not recorded): ${outcome.reason}`);
     return;
   }
+  // Attributed or `unattributed` — either way a real event to record; the
+  // `'unattributed'` sentinel is the needs-assignment flag (CONTEXT.md).
   void recordGenerationEvent(outcome);
 }
 
