@@ -67,13 +67,20 @@ export const markRefunded = mutation({
  * Net usage (charges minus refunds) for one Asset within an Organization,
  * plus the underlying events so callers can reconcile the total.
  *
- * Every roll-up filters by `organizationId` (ADR-0004). An `'unattributed'`
- * event never matches a real Asset id here, so it is excluded from Asset
- * totals while still rolling up to its Brand and Organization below.
+ * Every roll-up filters by `organizationId` (ADR-0004). `'unattributed'` is a
+ * reserved sentinel, not an Asset (CONTEXT.md / `@token-tracker/shared`): a
+ * charge with no Active Asset rolls up to its Brand and Organization but to no
+ * Asset. Passing it here is rejected so it can never surface as an Asset total
+ * (issue #6, criteria 2 & 3).
  */
 export const usageByAsset = query({
   args: { organizationId: v.string(), assetId: v.string() },
   handler: async (ctx, { organizationId, assetId }) => {
+    if (assetId === 'unattributed') {
+      throw new Error(
+        "'unattributed' is not an Asset; query its usage at the Brand or Organization level instead.",
+      );
+    }
     const events = await ctx.db
       .query('events')
       .withIndex('by_org_asset', (q) =>

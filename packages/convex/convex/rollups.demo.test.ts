@@ -1,4 +1,3 @@
-/// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import { expect, test } from 'vitest';
 import { api } from './_generated/api';
@@ -89,13 +88,15 @@ test('demo: all four roll-up axes reconcile against the underlying events', asyn
   // The unattributed 100 is in the brand/org totals but in neither asset total.
   expect(song.net + video.net).toBe(org.net - 100);
 
+  // Values are internal cost units (the stored `cost`). Displayed credits are
+  // internal / 100 at the presentation layer only (ADR-0005) — not applied here.
   console.log(
-    `\nNet usage roll-up demo (credits):
+    `\nNet usage roll-up demo (internal cost units):
   org ${ORG}: ${org.net}
     brand_alpha: ${alpha.net}   brand_beta: ${beta.net}
     asset song_1: ${song.net}   asset video_2: ${video.net}
     user_ann: ${ann.net}   user_ben: ${ben.net}
-  (100 unattributed credits roll up to brand_beta/org, to no asset)
+  (100 unattributed cost units roll up to brand_beta/org, to no asset)
 `,
   );
 });

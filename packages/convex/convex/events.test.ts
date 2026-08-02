@@ -1,5 +1,5 @@
-/// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
+import type { FunctionArgs } from 'convex/server';
 import { expect, test } from 'vitest';
 import { api } from './_generated/api';
 import schema from './schema';
@@ -9,23 +9,9 @@ const modules = import.meta.glob('./**/*.*s');
 
 const ORG = 'org_studio';
 
-type RefundState =
-  | { kind: 'none' }
-  | { kind: 'pending' }
-  | { kind: 'refunded'; amount: number; at: number };
-
-type EventInput = {
-  organizationId: string;
-  userId: string;
-  tool: 'flow' | 'higgsfield' | 'kling';
-  brandId: string;
-  assetId: string;
-  cost: number;
-  capturedAt: number;
-  ruleVersion: number;
-  refund?: RefundState;
-  toolRef?: string;
-};
+// Derived from the canonical `record` validator so the test can't drift from
+// the event shape (AGENTS.md §2 — never re-declare cross-cutting types).
+type EventInput = FunctionArgs<typeof api.events.record>;
 
 /** A fully-attributed Higgsfield event; override only what a test cares about. */
 function eventArgs(overrides: Partial<EventInput> = {}): EventInput {
@@ -87,6 +73,17 @@ test('an unattributed event is excluded from any asset total but counts at brand
   expect(asset.net).toBe(100); // unattributed excluded from the asset
   expect(brand.net).toBe(600); // but included at the brand
   expect(org.net).toBe(600); // and the org
+});
+
+test("the 'unattributed' sentinel cannot be queried as an asset total", async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(api.events.record, eventArgs({ assetId: 'unattributed', cost: 500 }));
+
+  // 'unattributed' is not an Asset, so an Asset roll-up must refuse it rather
+  // than report its credits as an asset total.
+  await expect(
+    t.query(api.events.usageByAsset, { organizationId: ORG, assetId: 'unattributed' }),
+  ).rejects.toThrow(/not an Asset/);
 });
 
 test('per-user usage is an independent axis from asset/brand', async () => {
