@@ -114,6 +114,11 @@ export {
 // Seed selection catalog for the popup's Org → Brand → Asset picker + login roster.
 export type { SeedAsset, SeedBrand, SeedCatalog, SeedOrg, SeedUser } from './seed';
 
+// Result media classification for the gallery: a Job carries only a `mediaUrl`,
+// so the image/video kind is derived from the URL once at the projection edge and
+// carried on the view (the renderer switches <video>/<img> off it, not the URL).
+export { type MediaKind, type ResultMedia, mediaKindOf } from './media';
+
 // Capture-retention rules for the Phase-1 probe's `raw_captures` table (ADR-0007):
 // the noise denylist and identical-consecutive-capture de-dup that bound its growth.
 export {

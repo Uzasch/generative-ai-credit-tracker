@@ -88,6 +88,11 @@ export default defineSchema({
     .index('by_org_brand', ['organizationId', 'brandId'])
     .index('by_org_asset', ['organizationId', 'assetId'])
     .index('by_org_user', ['organizationId', 'userId'])
+    // The gallery's per-editor intake tray: one editor's unattributed events.
+    // Scoped by org + user (the gallery is a single editor's surface, ADR-0004)
+    // and narrowed to the `'unattributed'` sentinel, so it never scans another
+    // editor's work or the org's attributed events.
+    .index('by_org_user_asset', ['organizationId', 'userId', 'assetId'])
     // Refund reconciliation looks an event up by its tool-side job-set id.
     .index('by_tool_ref', ['toolRef'])
     // Org-scoped tool-ref lookup: every query filters by `organizationId`
