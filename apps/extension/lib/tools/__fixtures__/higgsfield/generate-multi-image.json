@@ -1,0 +1,42 @@
+{
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/v2/nano_banana_2_lite",
+  "method": "POST",
+  "status": 200,
+  "body": {
+    "id": "REDACTED_PROJECT",
+    "job_sets": [
+      {
+        "id": "0d547efb-b757-437d-a566-890428d1115d",
+        "type": "nano_banana_2_lite",
+        "project_id": "REDACTED_PROJECT",
+        "cost": 300,
+        "params": {
+          "width": 1344,
+          "height": 768,
+          "aspect_ratio": "16:9",
+          "batch_size": 3,
+          "thinking": "HIGH",
+          "prompt": "<<<55a1fb7c-c772-4eef-84cc-1973a7a5b988>>> <<<e12c2034-b87d-4384-a574-e215a397026c>>>  runing around"
+        },
+        "jobs": [
+          {
+            "id": "41f3d26d-8fae-43af-ad8f-ea7382d2e074",
+            "status": "queued",
+            "user_id": "REDACTED_USER"
+          },
+          {
+            "id": "7f9aab41-412a-40f0-a2da-b2708eb594b2",
+            "status": "queued",
+            "user_id": "REDACTED_USER"
+          },
+          {
+            "id": "076c2117-8ade-41f8-ab33-395c2e1f7fe5",
+            "status": "queued",
+            "user_id": "REDACTED_USER"
+          }
+        ]
+      }
+    ],
+    "has_more": false
+  }
+}
