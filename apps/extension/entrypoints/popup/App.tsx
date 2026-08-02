@@ -11,6 +11,7 @@ import { seedCatalogRef } from '@/lib/seed';
 import type { ActiveContext } from '@token-tracker/shared';
 import { useQuery } from 'convex/react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { RecentGenerations } from './RecentGenerations';
 
 /**
  * Radix `Select` forbids an empty-string item value (it reserves `''` for the
@@ -203,6 +204,11 @@ export function App() {
           Clear Active Asset
         </Button>
       </div>
+
+      {/* Live tracking indicator (issue #18): the current editor's recent
+          generations with their live lifecycle status, from the reactive
+          org-scoped Convex query. */}
+      <RecentGenerations organizationId={organizationId} userId={userId} />
     </main>
   );
 }

@@ -1,4 +1,5 @@
 import { loadActiveContext } from '@/lib/activeContext';
+import { RecentActivityBadge } from '@/lib/badge';
 import {
   appendRawCapture,
   recordAnomaly,
@@ -74,6 +75,44 @@ const DISPLAYED_COST_WINDOW_MS = CLICK_WINDOW_MS + CLICK_SWEEP_BUFFER_MS;
  * `@/lib/displayedCost`.
  */
 const costCorrelator = new DisplayedCostCorrelator(DISPLAYED_COST_WINDOW_MS);
+
+/**
+ * How long a recorded generation keeps the toolbar badge lit (issue #18). The
+ * badge reflects *recent* activity, not a stale lifetime count, so captures decay
+ * out of this rolling window and the badge clears once activity stops. Two minutes
+ * is long enough to still be lit when the editor glances up after a generate, short
+ * enough that a number left on the toolbar always means "just now".
+ */
+const BADGE_WINDOW_MS = 120_000;
+
+/**
+ * Rolling count of generations recorded within `BADGE_WINDOW_MS`, rendered onto the
+ * toolbar badge. Module-level so it spans messages within one service-worker
+ * lifetime; the pure counting core lives in `@/lib/badge`.
+ */
+const activityBadge = new RecentActivityBadge(BADGE_WINDOW_MS);
+
+/** Pending badge-clear timer, so a burst of captures reschedules one decay, not many. */
+let badgeClearTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Flip the toolbar badge to reflect a just-recorded generation (issue #18): count
+ * it into the rolling window, render the badge text, and (re)arm a timer to
+ * recompute once this capture would age out — so the badge decays to empty rather
+ * than showing a stale count. `browser.action` is the MV3 toolbar button; this is
+ * the only side effect the badge model touches, kept out of the pure core.
+ */
+function flipBadge(now: number): void {
+  browser.action.setBadgeText({ text: activityBadge.record(now) });
+  // A subtle attention colour; the badge count is the signal, not the colour alone.
+  browser.action.setBadgeBackgroundColor({ color: '#2563eb' });
+  if (badgeClearTimer !== undefined) clearTimeout(badgeClearTimer);
+  badgeClearTimer = setTimeout(() => {
+    // Recompute after decay: empties to '' (no badge) if no capture followed.
+    browser.action.setBadgeText({ text: activityBadge.text(Date.now()) });
+    badgeClearTimer = undefined;
+  }, BADGE_WINDOW_MS + 100);
+}
 
 /**
  * Background: receives raw captures from the bridge and retains them in the
@@ -339,6 +378,9 @@ async function handleCapture(capture: RawCapture, tabId?: number): Promise<void>
   // Attributed or `unattributed` — either way a real event to record; the
   // `'unattributed'` sentinel is the needs-assignment flag (CONTEXT.md).
   void recordGenerationEvent(outcome);
+  // Flip the toolbar badge immediately (issue #18): the recorded generation is the
+  // "we got it" signal, independent of the async Convex round-trip above.
+  flipBadge(capture.capturedAt);
 }
 
 /** Parse a captured body as JSON; undefined if absent or not JSON. */

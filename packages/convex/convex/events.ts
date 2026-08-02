@@ -2,14 +2,16 @@ import {
   type JobStatus,
   type RefundMismatch,
   assertRefundAmount,
+  collectAnomalyRefs,
   crossCheckRefund,
+  isEventFlagged,
   isFailureStatus,
   refundForStatus,
 } from '@token-tracker/shared';
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { resolveAssetBrand } from './catalog';
-import { toGenerationView } from './gallery';
+import { toGenerationView, toRecentGeneration } from './gallery';
 import { sumNet } from './rollups';
 
 const refundState = v.union(
@@ -413,6 +415,50 @@ export const generationsByUser = query({
       .order('desc')
       .collect();
     return events.map(toGenerationView);
+  },
+});
+
+/**
+ * Live tracking indicator (issue #18): the current editor's most-recent
+ * generations within their Organization, newest-first, each carrying the derived
+ * lifecycle status (tracked → generating → generated / refunded / flagged) the
+ * popup row renders. The reactive read surface behind the popup's `useQuery`, so
+ * rows update in real time as status polls and refunds land — no manual refresh.
+ *
+ * Org- AND user-scoped (AGENTS.md §6, ADR-0004): read through `by_org_user` so an
+ * editor only ever sees their own generations, never another editor's or another
+ * tenant's. `.take(limit)` bounds the payload to recent activity rather than the
+ * editor's whole history — this is a live indicator, not the gallery.
+ *
+ * The `flagged` status needs the org's Flagged anomalies (#8): they live in a
+ * separate table and link back to a generation by job-set `toolRef`
+ * (`cost-mismatch`) or by job id (`unknown-status`). We read them once through the
+ * org-scoped `by_org_observed_at` index, index the links with `collectAnomalyRefs`,
+ * and mark each row via `isEventFlagged` — so classifying the page of events is
+ * O(events + anomalies), and the status derivation stays the single shared
+ * `lifecycleStatus` (AGENTS.md §6). A raw `click-no-request` anomaly references no
+ * generation (it has neither), so it never flags a row here.
+ */
+export const recentGenerations = query({
+  args: { organizationId: v.string(), userId: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, { organizationId, userId, limit }) => {
+    const events = await ctx.db
+      .query('events')
+      .withIndex('by_org_user', (q) => q.eq('organizationId', organizationId).eq('userId', userId))
+      .order('desc')
+      // Default to a small window — the indicator shows *recent* activity, not the
+      // full feed (that is the gallery's `generationsByUser`).
+      .take(limit ?? 20);
+
+    // The event's link to any Flagged anomaly is scoped to the SAME org (ADR-0004):
+    // an anomaly can never flag a row for a generation in another tenant.
+    const anomalies = await ctx.db
+      .query('flagged_anomalies')
+      .withIndex('by_org_observed_at', (q) => q.eq('organizationId', organizationId))
+      .collect();
+    const refs = collectAnomalyRefs(anomalies);
+
+    return events.map((event) => toRecentGeneration(event, isEventFlagged(event, refs)));
   },
 });
 
