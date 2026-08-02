@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test';
 import type { FunctionArgs } from 'convex/server';
 import { expect, test } from 'vitest';
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import schema from './schema';
 
 // convex-test loads every function module in this directory in-memory.
@@ -144,6 +144,59 @@ test('denormalises the unknown-status job id to a top-level indexable field (#18
       .collect(),
   );
   expect(byJob).toHaveLength(1);
+});
+
+test('backfill denormalises jobId onto pre-existing unknown-status rows (#18 review)', async () => {
+  // Simulate rows recorded BEFORE the top-level `jobId` existed: insert directly,
+  // omitting `jobId`, exactly as an old `record` would have. The backfill must set
+  // `jobId` from `evidence.jobId` so the `by_org_job_id` reverse lookup reaches them.
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    // A legacy unknown-status row with no denormalised jobId.
+    await ctx.db.insert('flagged_anomalies', {
+      organizationId: ORG,
+      tool: 'higgsfield',
+      observedAt: 1,
+      evidence: {
+        kind: 'unknown-status',
+        jobId: 'legacy_job',
+        rawStatus: 'weird',
+        sourceUrl: 'https://fnf-api-gw.higgsfield.ai/fnf/jobs/legacy_job',
+      },
+    });
+    // A legacy click row that must be left alone (it never links by job id).
+    await ctx.db.insert('flagged_anomalies', {
+      organizationId: ORG,
+      tool: 'higgsfield',
+      observedAt: 2,
+      evidence: { kind: 'click-no-request', host: 'higgsfield.ai', clickedAt: 1, windowMs: 4000 },
+    });
+  });
+
+  // Before the backfill the legacy row is unreachable by the job-id index.
+  const before = await t.run(async (ctx) =>
+    ctx.db
+      .query('flagged_anomalies')
+      .withIndex('by_org_job_id', (q) => q.eq('organizationId', ORG).eq('jobId', 'legacy_job'))
+      .collect(),
+  );
+  expect(before).toHaveLength(0);
+
+  const result = await t.mutation(internal.flaggedAnomalies.backfillUnknownStatusJobId, {});
+  expect(result).toEqual({ patched: 1, done: true });
+
+  // Now reachable by the index; the click row still carries no jobId.
+  const after = await t.run(async (ctx) =>
+    ctx.db
+      .query('flagged_anomalies')
+      .withIndex('by_org_job_id', (q) => q.eq('organizationId', ORG).eq('jobId', 'legacy_job'))
+      .collect(),
+  );
+  expect(after).toHaveLength(1);
+
+  // Idempotent: a second run patches nothing.
+  const rerun = await t.mutation(internal.flaggedAnomalies.backfillUnknownStatusJobId, {});
+  expect(rerun).toEqual({ patched: 0, done: true });
 });
 
 test('listByOrg returns newest-first', async () => {
