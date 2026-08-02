@@ -74,6 +74,9 @@ function extractGeneration(res: CapturedResponse): ExtractedGeneration | null {
     toolRef,
     prompt: readPrompt(jobSet.params),
     jobIds: readJobIds(jobSet.jobs),
+    // The tool-side `user_id` on each job is the shared Higgsfield seat, captured
+    // as metadata only — never our editor identity (ADR-0004).
+    toolAccount: readToolAccount(jobSet.jobs),
   };
 }
 
@@ -174,6 +177,18 @@ function readJobIds(jobs: unknown): string[] {
     if (isRecord(job) && typeof job.id === 'string') ids.push(job.id);
   }
   return ids;
+}
+
+/**
+ * The shared tool seat: every job in a set carries the same tool-side `user_id`,
+ * so the first job's is representative. Undefined when the response omits it.
+ */
+function readToolAccount(jobs: unknown): string | undefined {
+  if (!Array.isArray(jobs)) return undefined;
+  for (const job of jobs) {
+    if (isRecord(job) && typeof job.user_id === 'string') return job.user_id;
+  }
+  return undefined;
 }
 
 /** Pathname of a URL, or null when it cannot be parsed. */

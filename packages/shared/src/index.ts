@@ -16,6 +16,14 @@ export type RefundState =
   | { kind: 'pending' }
   | { kind: 'refunded'; amount: number; at: number };
 
+/**
+ * Whether the event is attributed to an Asset. `'needs-assignment'` is the
+ * explicit flag on an Unattributed Generation event (its `assetId` is the
+ * `'unattributed'` sentinel); an editor later resolves it via Assignment
+ * (CONTEXT.md), flipping it to `'assigned'`. Distinct from a Flagged anomaly.
+ */
+export type AssignmentState = { status: 'assigned' } | { status: 'needs-assignment' };
+
 /** Lifecycle of a single job within a generation's job set. */
 export const JOB_STATUSES = ['queued', 'in_progress', 'completed', 'failed'] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
@@ -57,6 +65,12 @@ export type GenerationEvent = {
   /** Child jobs of this generation; may be empty. */
   jobs: JobOutcome[];
   refund: RefundState;
+  /**
+   * Whether this event is attributed to an Asset. `'needs-assignment'` when
+   * captured with no Active Asset (mirrors the `'unattributed'` `assetId`
+   * sentinel); resolved to `'assigned'` by Assignment.
+   */
+  assignment: AssignmentState;
   /** Client capture time, ms since epoch. */
   capturedAt: number;
   /** Tool-side job/request id, used to reconcile refunds. */
@@ -71,6 +85,19 @@ export type GenerationEvent = {
 export function isTool(value: unknown): value is Tool {
   return typeof value === 'string' && (TOOLS as readonly string[]).includes(value);
 }
+
+// Attribution: the pure step that stamps a tool-extracted generation with the
+// editor's Active context, or flags it when no Active Asset is selected.
+export {
+  type ActiveContext,
+  type ExtractedGeneration,
+  type FlaggedAnomaly,
+  attribute,
+  isFlaggedAnomaly,
+} from './attribute';
+
+// Seed selection catalog for the popup's Org → Brand → Asset picker + login roster.
+export type { SeedAsset, SeedBrand, SeedCatalog, SeedOrg, SeedUser } from './seed';
 
 /**
  * Type guard for a job status observed in captured traffic. A status string we

@@ -48,7 +48,7 @@ export type ToolAdapter = {
  * A recognised **new generation** — the generate response that creates the
  * event and its charge. Attribution-free; the caller stamps user/brand/asset.
  */
-export type ExtractedGeneration = Pick<GenerationEvent, 'cost' | 'toolRef'> & {
+export type ExtractedGeneration = Pick<GenerationEvent, 'cost' | 'toolRef' | 'toolAccount'> & {
   kind: 'generation';
   /** The generation prompt when the response carries one. */
   prompt?: string;

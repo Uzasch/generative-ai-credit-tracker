@@ -9,6 +9,11 @@ const refundState = v.union(
   v.object({ kind: v.literal('refunded'), amount: v.number(), at: v.number() }),
 );
 
+const assignmentState = v.union(
+  v.object({ status: v.literal('assigned') }),
+  v.object({ status: v.literal('needs-assignment') }),
+);
+
 const jobStatus = v.union(
   v.literal('queued'),
   v.literal('in_progress'),
@@ -46,17 +51,29 @@ export const record = mutation({
     cost: v.number(),
     jobs: v.optional(v.array(jobOutcome)),
     refund: v.optional(refundState),
+    assignment: v.optional(assignmentState),
     capturedAt: v.number(),
     toolRef: v.optional(v.string()),
     toolAccount: v.optional(v.string()),
     ruleVersion: v.number(),
   },
   handler: async (ctx, args) => {
-    const { refund, jobs, ...rest } = args;
+    const { refund, jobs, assignment, ...rest } = args;
+    // The assignment flag mirrors the `'unattributed'` assetId sentinel
+    // (AGENTS.md §6). Derive the expected value here — this is the source of
+    // truth's write boundary — so a contradictory event can never be persisted:
+    // default to the derived value when omitted, and reject a mismatched one.
+    const expected = rest.assetId === 'unattributed' ? 'needs-assignment' : 'assigned';
+    if (assignment && assignment.status !== expected) {
+      throw new Error(
+        `assignment '${assignment.status}' contradicts assetId '${rest.assetId}' (expected '${expected}')`,
+      );
+    }
     return await ctx.db.insert('events', {
       ...rest,
       jobs: jobs ?? [],
       refund: refund ?? { kind: 'none' },
+      assignment: { status: expected },
     });
   },
 });
