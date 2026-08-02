@@ -81,5 +81,10 @@ export default defineSchema({
     .index('by_org_asset', ['organizationId', 'assetId'])
     .index('by_org_user', ['organizationId', 'userId'])
     // Refund reconciliation looks an event up by its tool-side job-set id.
-    .index('by_tool_ref', ['toolRef']),
+    .index('by_tool_ref', ['toolRef'])
+    // Org-scoped tool-ref lookup: every query filters by `organizationId`
+    // (AGENTS.md §6, ADR-0004), so a cross-check can never resolve another
+    // tenant's event, and duplicate `toolRef`s across orgs stay isolated
+    // (a bare `by_tool_ref` `.unique()` would throw on the collision).
+    .index('by_org_tool_ref', ['organizationId', 'toolRef']),
 });

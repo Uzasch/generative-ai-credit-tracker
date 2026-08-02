@@ -75,6 +75,11 @@ async function handleCapture(capture: RawCapture): Promise<void> {
         jobId: update.jobId,
         status: update.status,
         mediaUrl: update.mediaUrl,
+        // Attribute any refund this poll triggers to when the status was
+        // observed (the capture time), not to mutation-delivery time. The
+        // terminal-status poll is the earliest, most accurate refund timestamp
+        // the runtime has (the wallet delta lands seconds later, finding rule 4).
+        at: capture.capturedAt,
       });
     }
     return;
