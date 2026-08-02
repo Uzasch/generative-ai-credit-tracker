@@ -1,5 +1,5 @@
 import { appendRawCapture } from '@/lib/convex';
-import { isCaptureMessage } from '@/lib/messaging';
+import { isCaptureHostUrl, isCaptureMessage } from '@/lib/messaging';
 import { type CapturedResponse, extractUsage } from '@/lib/tools';
 
 /**
@@ -12,6 +12,11 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: unknown) => {
     if (!isCaptureMessage(message)) return;
     const capture = message.payload;
+
+    // Re-enforce host scope at the trust boundary: the MAIN world is shared with
+    // the page, so a page script could post a well-formed message for any URL.
+    // Only fnf-api-gw traffic is ever retained (ADR-0001, criterion 1).
+    if (!isCaptureHostUrl(capture.url)) return;
 
     // Retain raw traffic first — this is the deliverable of the capture probe.
     void appendRawCapture(capture);

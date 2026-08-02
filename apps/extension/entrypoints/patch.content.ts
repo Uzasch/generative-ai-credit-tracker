@@ -1,4 +1,4 @@
-import { CAPTURE_SOURCE, TOOL_MATCHES } from '@/lib/messaging';
+import { CAPTURE_HOST, CAPTURE_SOURCE, TOOL_MATCHES } from '@/lib/messaging';
 import type { RawCapture } from '@/lib/tools';
 
 /**
@@ -11,8 +11,6 @@ import type { RawCapture } from '@/lib/tools';
  * (`clerk`), storage (`kopir`), `cms`, and `sentry` traffic is never captured.
  * Request headers are never read, so no auth token can leak into a capture.
  */
-const CAPTURE_HOST = 'fnf-api-gw.higgsfield.ai';
-
 export default defineContentScript({
   matches: TOOL_MATCHES,
   world: 'MAIN',
@@ -31,15 +29,31 @@ export default defineContentScript({
       // Snapshot the request WITHOUT delaying the real fetch: method is read
       // synchronously; a Request body is cloned synchronously (reading text is
       // deferred). Headers are deliberately ignored, so no auth token leaks.
-      const method = requestMethod(input, init);
-      const requestSource = requestBodySource(input, init);
+      // Any failure here (e.g. cloning an already-consumed Request throws) must
+      // never affect the page's fetch — fall back to observing nothing.
+      let method = 'GET';
+      let requestSource: RequestBodySource = { kind: 'none' };
+      try {
+        method = requestMethod(input, init);
+        requestSource = requestBodySource(input, init);
+      } catch {
+        requestSource = { kind: 'none' };
+      }
 
       // Fire the real request immediately — observe only, never block or modify.
       const responsePromise = originalFetch(...args);
-      void responsePromise.then((response) => {
-        // Clone so the page still consumes the body untouched.
-        inspect(url, method, requestSource, response.clone());
-      });
+      // Attach a rejection handler so observing never adds an unhandled
+      // rejection to the page; the page still gets the original promise below.
+      responsePromise.then(
+        (response) => {
+          // Clone so the page still consumes the body untouched.
+          void inspect(url, method, requestSource, response.clone()).catch(() => {});
+        },
+        () => {
+          // The page's own fetch rejected — nothing to observe. Swallow so this
+          // observer branch produces no unhandled rejection of its own.
+        },
+      );
       return responsePromise;
     };
 
