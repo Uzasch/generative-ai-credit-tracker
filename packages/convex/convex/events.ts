@@ -431,20 +431,23 @@ export const generationsByUser = query({
  * editor's whole history — this is a live indicator, not the gallery.
  *
  * The `flagged` status needs the org's Flagged anomalies (#8): they live in a
- * separate table and link back to a generation by its job-set `toolRef`. For each
- * shown event we look its anomalies up EXACTLY through the `by_org_tool_ref` index
- * — bounded per event and never dropping a still-relevant anomaly past a scan
- * window — then mark the row via the shared `isEventFlagged`/`lifecycleStatus`
- * (AGENTS.md §6, one source of truth). A raw `click-no-request` anomaly references
- * no generation (it has no `toolRef`), so it never flags a row.
+ * separate table and link back to a generation by TWO reverse links, and a shown
+ * event is flagged if either matches (via the shared `isEventFlagged` /
+ * `lifecycleStatus` — AGENTS.md §6, one source of truth):
  *
- * `unknown-status` anomalies carry only a `jobId` in their `evidence` and no
- * top-level `toolRef`, so they are not reachable by this index and don't flag a row
- * yet. That is a deliberate, documented gap (rare now that `nsfw`/`failed` are
- * known statuses): closing it means denormalising the offending job's set-`toolRef`
- * onto the anomaly row at record time, which touches #8's write path — a follow-up,
- * not this display ticket. The shared matcher already handles the jobId case for
- * when that lands.
+ *  1. by the event's job-set `toolRef` — how a `cost-mismatch` anomaly links.
+ *     Looked up EXACTLY through the `by_org_tool_ref` index. A raw
+ *     `click-no-request` anomaly references no generation (it has no `toolRef`),
+ *     so it never flags a row.
+ *  2. by the event's job ids — how an `unknown-status` anomaly links: that arm
+ *     carries no top-level `toolRef`, only the offending `jobId`, denormalised at
+ *     record time onto `flagged_anomalies.jobId` and looked up through the
+ *     `by_org_job_id` index (#18 review). WITHOUT this, an `unknown-status` flag
+ *     would never load and the affected generation would read "generating" forever
+ *     instead of "flagged", hiding the anomaly.
+ *
+ * Both lookups are org-scoped (ADR-0004) and index-bounded to just these shown
+ * events' anomalies — never the org's whole anomaly history.
  */
 export const recentGenerations = query({
   args: { organizationId: v.string(), userId: v.string(), limit: v.optional(v.number()) },
@@ -462,10 +465,14 @@ export const recentGenerations = query({
       // full feed (that is the gallery's `generationsByUser`).
       .take(limit ?? 20);
 
-    // Resolve each shown event's `flagged` status by an EXACT, org-scoped reverse
-    // lookup on its `toolRef` (ADR-0004 — same tenant only): fetch just the
-    // anomalies that reference these events, not the org's whole anomaly history.
-    // De-duplicate `toolRef`s so repeated ids cost one lookup.
+    // Resolve each shown event's `flagged` status by EXACT, org-scoped reverse
+    // lookups (ADR-0004 — same tenant only): fetch just the anomalies that
+    // reference these shown events, never the org's whole anomaly history. Two
+    // links, because anomalies reference a generation two ways (see doc comment):
+    //   1. by the event's job-set `toolRef`   (`by_org_tool_ref`);
+    //   2. by the event's job ids             (`by_org_job_id`, an `unknown-status`
+    //      anomaly's only link — it carries no `toolRef`).
+    // De-duplicate the ids so repeated ones cost one lookup each.
     const toolRefs = [
       ...new Set(
         events
@@ -473,17 +480,32 @@ export const recentGenerations = query({
           .filter((toolRef): toolRef is string => toolRef !== undefined),
       ),
     ];
-    const anomalyGroups = await Promise.all(
-      toolRefs.map((toolRef) =>
-        ctx.db
-          .query('flagged_anomalies')
-          .withIndex('by_org_tool_ref', (q) =>
-            q.eq('organizationId', organizationId).eq('toolRef', toolRef),
-          )
-          .collect(),
+    const jobIds = [...new Set(events.flatMap((event) => event.jobs.map((job) => job.jobId)))];
+    const [byToolRef, byJobId] = await Promise.all([
+      Promise.all(
+        toolRefs.map((toolRef) =>
+          ctx.db
+            .query('flagged_anomalies')
+            .withIndex('by_org_tool_ref', (q) =>
+              q.eq('organizationId', organizationId).eq('toolRef', toolRef),
+            )
+            .collect(),
+        ),
       ),
-    );
-    const refs = collectAnomalyRefs(anomalyGroups.flat());
+      Promise.all(
+        jobIds.map((jobId) =>
+          ctx.db
+            .query('flagged_anomalies')
+            .withIndex('by_org_job_id', (q) =>
+              q.eq('organizationId', organizationId).eq('jobId', jobId),
+            )
+            .collect(),
+        ),
+      ),
+    ]);
+    // Both link sets feed one matcher; `collectAnomalyRefs` de-dups (sets), so an
+    // anomaly that matched via both links is counted once.
+    const refs = collectAnomalyRefs([...byToolRef.flat(), ...byJobId.flat()]);
 
     return events.map((event) => toRecentGeneration(event, isEventFlagged(event, refs)));
   },

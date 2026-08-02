@@ -447,7 +447,13 @@ async function handleCapture(capture: RawCapture, tabId?: number): Promise<void>
   // truth (issue #18): a badge that lit on a dropped write would tell the editor
   // "we got it" for a generation the popup list will never show.
   const recorded = await recordGenerationEvent(outcome);
-  if (recorded) flipBadge(capture.capturedAt);
+  // Start the "recent activity" window at the SUCCESSFUL-RECORD time (now), not
+  // `capture.capturedAt` (#18 review): `capturedAt` is a page-shared, possibly
+  // stale-or-spoofed client timestamp. On a delayed/offline write the capture
+  // could already be outside the badge window by the time it records (the badge
+  // would paint then instantly decay), and a future timestamp would keep it lit
+  // too long. The record time is the moment the editor's "just now" actually is.
+  if (recorded) flipBadge(Date.now());
 }
 
 /** Parse a captured body as JSON; undefined if absent or not JSON. */

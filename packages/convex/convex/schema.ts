@@ -156,6 +156,15 @@ export default defineSchema({
     tool: v.union(v.literal('flow'), v.literal('higgsfield'), v.literal('kling')),
     // Tool-side job/job-set id when the trigger has one; absent for a raw click.
     toolRef: v.optional(v.string()),
+    // Denormalised copy of the offending job id for the `unknown-status` arm, hoisted
+    // out of `evidence` to a top-level, indexable field at record time (#18 review).
+    // An `unknown-status` anomaly carries no `toolRef` — its only link back to a
+    // generation is the job whose status could not be classified — and Convex cannot
+    // index a field nested inside the `evidence` union. Without this, the live
+    // indicator's reverse lookup (`by_org_job_id`) could never load the anomaly, so
+    // the affected generation would read "generating" forever instead of "flagged".
+    // Absent for the other arms (they link by `toolRef`, or not at all).
+    jobId: v.optional(v.string()),
     observedAt: v.number(),
     evidence: anomalyEvidence,
   })
@@ -164,6 +173,13 @@ export default defineSchema({
     // creation time, which fire-and-forget mutations can reorder relative to
     // `observedAt` (finding: newest-first must key off `observedAt`).
     .index('by_org_observed_at', ['organizationId', 'observedAt'])
+    // Exact reverse lookup from a generation's job ids to the `unknown-status`
+    // anomalies that reference it (#18 review): the live indicator resolves each
+    // shown event's `flagged` flag by its job ids through this index, bounded to
+    // just those events' anomalies rather than scanning the org's whole history.
+    // Only `unknown-status` rows carry a `jobId`, so the index holds exactly the
+    // anomalies this reverse link can match.
+    .index('by_org_job_id', ['organizationId', 'jobId'])
     // Exact reverse lookup from a generation's job-set `toolRef` to the anomalies
     // that reference it (#18's `flagged` status): the live indicator resolves each
     // shown event's flag through this index rather than scanning the org's whole

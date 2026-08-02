@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internal } from './_generated/api';
+import { internalMutation, mutation, query } from './_generated/server';
 
 /**
  * Flagged anomalies (ADR-0002, CONTEXT.md "Flagged anomaly"). When the
@@ -59,7 +60,60 @@ export const record = mutation({
     evidence: anomalyEvidence,
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert('flagged_anomalies', args);
+    // Denormalise the `unknown-status` job id to a top-level, indexable field so the
+    // live tracking indicator can reverse-look-up this anomaly by a generation's job
+    // ids (#18 review). That arm carries no `toolRef`, so the offending job is its
+    // only link back to the event, and Convex cannot index inside the `evidence`
+    // union — hence the hoist here at the write boundary. Derived server-side, so the
+    // caller's input contract (mirroring `FlaggedAnomalyInput`) stays unchanged. The
+    // matcher (`isEventFlagged`) still reads `evidence.jobId`; this copy only feeds
+    // the index.
+    const jobId = args.evidence.kind === 'unknown-status' ? args.evidence.jobId : undefined;
+    return await ctx.db.insert('flagged_anomalies', { ...args, jobId });
+  },
+});
+
+/**
+ * One-off backfill (#18 review): denormalise `evidence.jobId` onto the top-level,
+ * indexable `jobId` field for `unknown-status` anomalies recorded BEFORE that field
+ * existed. Those pre-existing rows have `evidence.jobId` but no top-level `jobId`,
+ * so the live indicator's `by_org_job_id` reverse lookup can't reach them and the
+ * affected generation would keep reading "generating" instead of "flagged". New
+ * rows are denormalised at record time (see `record`); this closes the gap for the
+ * already-deployed ones.
+ *
+ * Internal, so no client can trigger or parametrise it — run once against the
+ * deployment (`npx convex run flaggedAnomalies:backfillUnknownStatusJobId`).
+ * Walks the table by cursor in bounded pages so a large backlog never exceeds
+ * Convex's per-transaction read limit, rescheduling itself until the cursor is
+ * drained — the same batched, self-rescheduling shape as `rawCaptures.pruneOld`.
+ * Idempotent: a re-run patches nothing, since matched rows already carry `jobId`,
+ * and the cursor advances regardless of whether a page contained backfill targets
+ * (so pages of only other anomaly kinds can never wedge the walk).
+ */
+export const backfillUnknownStatusJobId = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())), batch: v.optional(v.number()) },
+  handler: async (ctx, { cursor, batch }): Promise<{ patched: number; done: boolean }> => {
+    const numItems = batch ?? 200;
+    const page = await ctx.db
+      .query('flagged_anomalies')
+      .paginate({ cursor: cursor ?? null, numItems });
+    let patched = 0;
+    for (const row of page.page) {
+      // Only unknown-status rows link by job id; only those still missing the
+      // denormalised copy need patching (leave already-backfilled rows untouched).
+      if (row.evidence.kind === 'unknown-status' && row.jobId === undefined) {
+        await ctx.db.patch(row._id, { jobId: row.evidence.jobId });
+        patched += 1;
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.flaggedAnomalies.backfillUnknownStatusJobId, {
+        cursor: page.continueCursor,
+        batch: numItems,
+      });
+    }
+    return { patched, done: page.isDone };
   },
 });
 

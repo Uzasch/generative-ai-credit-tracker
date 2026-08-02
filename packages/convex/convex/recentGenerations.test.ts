@@ -119,11 +119,12 @@ test('a cost-mismatch anomaly flags its event by toolRef; flagged outranks the o
   expect(rows[0]?.status).toBe('flagged');
 });
 
-test('an unknown-status anomaly with no toolRef does not flag the row yet (documented gap)', async () => {
+test('an unknown-status anomaly (jobId only, no toolRef) flags its event by job id (#18 review)', async () => {
   // `unknown-status` carries only a jobId in its evidence and no top-level toolRef,
-  // so the exact `by_org_tool_ref` reverse lookup can't reach it. Closing this gap
-  // means denormalising the job's set-toolRef onto the anomaly row at record time
-  // (touches #8's write path) — a follow-up, not this display ticket.
+  // so it can only link back to a generation through the job whose status could not
+  // be classified. The record path denormalises that jobId onto the anomaly row and
+  // the indicator reverse-looks-it-up through `by_org_job_id`; without this the
+  // affected generation would read "generating" forever instead of "flagged".
   const t = convexTest(schema, modules);
   await t.mutation(
     api.events.record,
@@ -132,6 +133,11 @@ test('an unknown-status anomaly with no toolRef does not flag the row yet (docum
       jobs: [{ jobId: 'j_weird', status: 'in_progress' }],
     }),
   );
+
+  // Before the anomaly the in-flight job reads as generating.
+  let rows = await t.query(api.events.recentGenerations, { organizationId: ORG, userId: USER });
+  expect(rows[0]?.status).toBe('generating');
+
   await t.mutation(api.flaggedAnomalies.record, {
     organizationId: ORG,
     tool: 'higgsfield',
@@ -139,6 +145,35 @@ test('an unknown-status anomaly with no toolRef does not flag the row yet (docum
     evidence: {
       kind: 'unknown-status',
       jobId: 'j_weird',
+      rawStatus: 'exploded',
+      sourceUrl: 'https://fnf-api-gw.higgsfield.ai/fnf/jobs/status-batch',
+    },
+  });
+
+  rows = await t.query(api.events.recentGenerations, { organizationId: ORG, userId: USER });
+  expect(rows[0]?.status).toBe('flagged');
+});
+
+test('an unknown-status anomaly is tool-scoped — a colliding job id in another tool never flags', async () => {
+  // A jobId is unique only WITHIN a tool; the reverse lookup must not flag an
+  // unrelated event from another provider whose job id string happens to collide.
+  const t = convexTest(schema, modules);
+  await t.mutation(
+    api.events.record,
+    eventArgs({
+      tool: 'flow',
+      toolRef: 'set_flow',
+      jobs: [{ jobId: 'j_shared', status: 'in_progress' }],
+    }),
+  );
+  // The anomaly is a higgsfield job id that happens to equal the flow event's.
+  await t.mutation(api.flaggedAnomalies.record, {
+    organizationId: ORG,
+    tool: 'higgsfield',
+    observedAt: 10,
+    evidence: {
+      kind: 'unknown-status',
+      jobId: 'j_shared',
       rawStatus: 'exploded',
       sourceUrl: 'https://fnf-api-gw.higgsfield.ai/fnf/jobs/status-batch',
     },
