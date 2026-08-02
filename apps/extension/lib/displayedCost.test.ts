@@ -68,11 +68,14 @@ describe('DisplayedCostCorrelator', () => {
     expect(c.pendingCount).toBe(0);
   });
 
-  it('tolerates a response whose clock lands slightly before the click', () => {
-    const c = new DisplayedCostCorrelator(WINDOW, 1000);
+  it('never pairs a click that is timestamped after the response', () => {
+    const c = new DisplayedCostCorrelator(WINDOW);
+    // A later click (e.g. buffered while handleCapture was suspended) must not be
+    // paired with this earlier response — same-tab clocks can't run backwards, so
+    // pairing it would be a false cost-mismatch (Codex #13).
     c.onClick(3, 5000);
-    // Response captured 800ms "before" the click due to clock skew — still paired.
-    expect(c.matchResponse(4200)).toBe(3);
+    expect(c.matchResponse(4200)).toBeNull();
+    expect(c.pendingCount).toBe(1);
   });
 
   it("scopes pairing to the tab: a response cannot consume another tab's click", () => {

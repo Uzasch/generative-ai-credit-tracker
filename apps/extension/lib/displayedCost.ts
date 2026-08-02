@@ -98,12 +98,6 @@ export class DisplayedCostCorrelator {
   constructor(
     /** How long after a click a generate response may still be paired with it. */
     private readonly windowMs: number,
-    /**
-     * Clock-skew tolerance: the click clock (content script) and the response
-     * capture clock are independent, so a response can land a hair before its
-     * click. Without this slop that skew would miss a genuine pairing.
-     */
-    private readonly slopMs = 1000,
   ) {}
 
   /** Buffer a displayed cost read at click time, to be paired with its response. */
@@ -114,9 +108,15 @@ export class DisplayedCostCorrelator {
   /**
    * A generate response was captured at `responseAt` in tab `tabId`. Return the
    * displayed cost of the pending click from the SAME tab it belongs to — but ONLY
-   * when that pairing is unambiguous: exactly one pending click sits in the window
-   * (clicked no more than `windowMs` before, and no more than `slopMs` after, the
-   * response). Returns null otherwise, and consumes nothing.
+   * when that pairing is unambiguous: exactly one pending click sits in the window,
+   * clicked at or before the response and no more than `windowMs` earlier. Returns
+   * null otherwise, and consumes nothing.
+   *
+   * A click strictly after the response (`clickedAt > responseAt`) is never a
+   * candidate: both timestamps come from `Date.now()` in the same tab (same clock),
+   * so a response cannot causally precede its own click. Without that guard, an
+   * unrelated later click buffered while `handleCapture` was suspended could be
+   * mis-paired with this earlier response and raise a false `cost-mismatch`.
    *
    * Why "exactly one" rather than oldest-first: two generations started rapidly in
    * one tab can have their network responses complete out of order, so
@@ -132,8 +132,8 @@ export class DisplayedCostCorrelator {
     for (let i = 0; i < this.pending.length; i++) {
       const p = this.pending[i];
       if (p === undefined || p.tabId !== tabId) continue;
-      const delta = responseAt - p.clickedAt; // > 0: response after click (normal order)
-      if (delta <= this.windowMs && delta >= -this.slopMs) candidates.push(i);
+      const delta = responseAt - p.clickedAt; // ≥ 0: response at/after its click
+      if (delta >= 0 && delta <= this.windowMs) candidates.push(i);
     }
     if (candidates.length !== 1) return null;
     const [index] = candidates;
