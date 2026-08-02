@@ -16,6 +16,8 @@ export default defineConfig({
       'https://labs.google/*',
       'https://*.higgsfield.ai/*',
       'https://*.klingai.com/*',
+      // Background service worker writes raw captures to our Convex deployment.
+      'https://*.convex.cloud/*',
     ],
   },
 });
