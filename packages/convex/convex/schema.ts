@@ -55,11 +55,14 @@ export default defineSchema({
     toolAccount: v.optional(v.string()),
     ruleVersion: v.number(),
   })
-    // Roll-up query paths: event -> asset -> brand, and event -> user.
-    .index('by_asset', ['assetId'])
-    .index('by_brand', ['brandId'])
-    .index('by_user', ['userId'])
+    // Roll-up query paths. Every roll-up is scoped to one Organization
+    // (ADR-0004, single-org isolation), so each index leads with
+    // `organizationId`: event -> org, org -> brand, org -> asset, and
+    // independently org -> user.
     .index('by_org', ['organizationId'])
     .index('by_org_brand', ['organizationId', 'brandId'])
+    .index('by_org_asset', ['organizationId', 'assetId'])
+    .index('by_org_user', ['organizationId', 'userId'])
+    // Refund reconciliation looks an event up by its tool-side job-set id.
     .index('by_tool_ref', ['toolRef']),
 });
