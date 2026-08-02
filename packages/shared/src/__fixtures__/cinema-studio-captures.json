@@ -1,0 +1,441 @@
+{
+  "_provenance": "input/higgfield/image/cinema-studio/cinemastudio.har (real capture). Non-fnf hosts and CORS-preflight OPTIONS dropped (the fetch probe never sees them). Request/response bodies replaced with sha256 hashes: PII-free but byte-equality preserving, so the de-dup rule behaves identically to the raw bodies. URLs kept verbatim (only ids/pagination in query strings, no secrets).",
+  "totalObserved": 62,
+  "expectedRetained": 22,
+  "captures": [
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/tours",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "method": "POST",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders",
+      "status": 200,
+      "requestBody": "sha256:edf6ed914c325fb8153f6e54b42f4f34b819ccf79976ccc224be88705abb5d20",
+      "responseBody": "sha256:29acf2bb209a71f295ec2f18f76e1399b8ad9de6b0a6c7c9f8e1797690b42bb1"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:bf6b53909124e451693949f3deec7fbb1f1143a66e336168706709d45b5a6016"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/pinned?surface=cinematic_studio&recent_jobs_count=4",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/accessible?size=100&surface=cinematic_studio&only_unpinned=true&sort_by=name&recent_jobs_count=4",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:6e08a264ac1e98ce607ded2787d046a19bae0ed1f8afeab9a2cd6cd3624d9e2d"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f/children?size=1",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:9da28c19a4ca0ee529fdff9a91af61f0cc4b252af2906724952fee41d665f457"
+    },
+    {
+      "method": "POST",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/v2/soul_cinema_studio",
+      "status": 200,
+      "requestBody": "sha256:bd15fad41a548d6648e2920f1aed60780628a8b13337a339aadd491a314d494f",
+      "responseBody": "sha256:02bfd556486a43789aa0e70e063709a8fab6be05f3ffa58c8d393a6796c0a6db"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/b40457f7-e145-4a8d-92a6-71b49905eb62?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:bb30a83d98701217e44bc14c23de0e08e3fa6dbe25aadeb27578518039422146"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/b30c24cf-3748-4544-a2ee-d1afe8ce9bf4?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:3fa9da2236e19ba78c9cbaf49d22acd39f30d5f1e756f0d8dfb75cb79418faa3"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/user",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:f23ee6cf4222e3f13a4ad9dd720c4923f8eb47699ccae8eb88faedaa06bb0098"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:3436de9059dbe46cc1eefd79a4a3b09c43d95ba07d5ba9a4235fb4df1c1e2fc1"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f/members/v2?size=1000",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:e5659aebe90f3cb5940088071e2c0277a4581bb135a0d74895a71a478fd81c7b"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f/publish",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:d1509a2eb5e115066608ac91b45e16e1f18d1560b863df4430e57259346799e5"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd/members/v2?size=1000",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:e5659aebe90f3cb5940088071e2c0277a4581bb135a0d74895a71a478fd81c7b"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd/info?size=10",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:9850b62223709533d4b2e66e47d08b8857b758b941600fae930a448bfbec5fc2"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f/access-requests",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f/role-requests",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/banner/settings",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:496a6df65fde4b08cf47aba74f10df1f241f8f064ba2020fac44c30a7589ec39"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/pinned",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f/children?size=100&sort_by=name",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:299398db00bde61391f9ceb3640346020cd6007a4bb40097b120aa8c2b630469"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd/children?size=100&sort_by=name",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:802553621f94dc57e72cc7d7980b40e91c3dc3d9ffe3bf997ad6494467b8f1cd"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd/items/v2?include_subfolders=true&size=50",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:a077a57691a71bfca5884bb436e0254331ecd050d655f486d5e06ef2ceb817f1"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/v2/reference-elements/pinned?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:f96c0568095aff7515042c75e6826789d62893678a558a68d81d6f7c65732e3d"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/v2/reference-elements/pinned?folder_id=0965e0bb-f064-4e63-9c7b-5627df0f2c0f",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:f96c0568095aff7515042c75e6826789d62893678a558a68d81d6f7c65732e3d"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/v2/reference-elements/picker?size=10&folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd&include_subfolders=true",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:32e1c5f928f02a80bfd650c32c78815ad1f3d6bbfaf45682cb3f3bd53066cb9e"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/v2/reference-elements/picker?size=10&folder_id=0965e0bb-f064-4e63-9c7b-5627df0f2c0f&include_subfolders=true",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:32e1c5f928f02a80bfd650c32c78815ad1f3d6bbfaf45682cb3f3bd53066cb9e"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/color-presets?size=30",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:f25b35cb2952524d71a5a85802fa06b86453e64b96d982c937e06ee8a2b1aa33"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/soul-v2/presets/3db34ab5-3439-4317-9e03-08dc30852e69",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:bdd398659b65554816f93e0aec0345e205173ed9755d8ece42e87b580260ceea"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/feedback/nps",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:a09be8f59a05a1c95c6ac1f8507752283e3aa64c794203b621c97c747b1cfa34"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/custom-references/14fd7743-7e99-4b63-ba8a-b4bc97688f52",
+      "status": 404,
+      "requestBody": null,
+      "responseBody": "sha256:ce5f4bf82b274bc07cce1eeae4d7b0336725207f9e91fea358c0fa3ed9ecd519"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/workspaces/settings",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:b270939832720de53d3226ad4639c7ce9424bc071506faf445346a9a85ab5f9f"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/concurrent-boost-credits/state",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:656294c9d1e220122e7e58971869892d9568249ac9d0aef1956dfc51a24f010d"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/concurrent-boost-credits/products",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:d7d21a6d2d9927bcfe0e8217c9758b6ecb135660befe61e50a0b159e6e37ae8f"
+    },
+    {
+      "method": "POST",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/status-batch",
+      "status": 200,
+      "requestBody": "sha256:691c86f7533cef8db5dfc92843fdd1b09b56b4ef2fe4bcf41e52a514ed2527b7",
+      "responseBody": "sha256:269a99ee0c98839f4a76ba746a2650e6a014b468543a35230c42bb7c67286cae"
+    },
+    {
+      "method": "POST",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/favourites/liked-by/v2",
+      "status": 200,
+      "requestBody": "sha256:778ee11fd58a77cce330a91b5cd735de52eb54327692ee017d5639837ef265f0",
+      "responseBody": "sha256:a9bc58349a3cb2666bd8f094ce408f9317780335bd825f9256b2cd6c9aa94092"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/b40457f7-e145-4a8d-92a6-71b49905eb62?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:4cc44c06906c51594738f6d5cbf1e148fd62e3686bd5689eb4130ed2bd5aa4a5"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/b30c24cf-3748-4544-a2ee-d1afe8ce9bf4?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:61a57f003d7f7a18fcea3aed3a8d201dc52c3d5d2bcbc24b5eb18a57b25369b7"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/v2/quizzes/user",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:d660276f3b46bfdf7095a835ee1e3d1c8c0cfe200633540bcc138348c8df48ca"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/referral-campaigns/referee",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/referral-campaigns/state?page=1&page_size=25",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:9522e0ab9bc53597fce6d13c059603476f0b90bf52794aa9609852da53c08a71"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/referral-campaigns/gifts",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f?include_folders_count=true",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:c712b8a772b41dfe495435b60d4c8efa6c0ab1cf4c1515d852669a5305809244"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/0965e0bb-f064-4e63-9c7b-5627df0f2c0f/publish",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:d1509a2eb5e115066608ac91b45e16e1f18d1560b863df4430e57259346799e5"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf-notification/notifications?limit=10&tab=unread",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:b0b61ffd9ca00b8d398143135df006c6edf72d0ddbc9e0c165113b1a521e2e5b"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf-notification/notifications?limit=10&tab=requests",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:54776c23311f9daa44591fd680ad92e7d94e5fb1795975381e0ae075aca54e36"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/tours",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/workspaces/wallet",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:bbb9c0bc128e224bff8a06aeed1fedf6f52ea4af75b3c8eabffc0a64b71c42e2"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/supercomputer/storage/usage",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:af4520d11a658b508a4b3f00f54fd4c6c66dfec250904a1819cf6c9b3b2a992d"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/workspaces/details",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:d299739d1a9993f44e8d2d365d0e98c495749d1b4dd199afa28dfd3f4eb13dbc"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/tours",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd/items/v2?include_subfolders=true&size=50",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:ea81e35983759922c6bc742db29c6261ca89cd6007443a8366e3ada0a0fcfcc2"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd/items/v2?include_subfolders=true&size=50",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:ea81e35983759922c6bc742db29c6261ca89cd6007443a8366e3ada0a0fcfcc2"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/b40457f7-e145-4a8d-92a6-71b49905eb62?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:5c0307378fa8d7d293c07881d2b8af0eee5f9193cadb9b2dd14dfee1cac6abf2"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/b30c24cf-3748-4544-a2ee-d1afe8ce9bf4?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:f58ca94e7a5dcf4d2801856fb8e2835214a68c85db866c3c0aac6c7c465d0fa4"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/banner/settings",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:496a6df65fde4b08cf47aba74f10df1f241f8f064ba2020fac44c30a7589ec39"
+    },
+    {
+      "method": "POST",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/tours",
+      "status": 200,
+      "requestBody": "sha256:2c1af10cd3190e41766673abe98b5dfad5df3b7c6302cdb86ace76243131d4c1",
+      "responseBody": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "method": "POST",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/tours",
+      "status": 200,
+      "requestBody": "sha256:4514a56f9c2a4ec783539068477a9d032e375929aa0de72ae96adca1b2083d41",
+      "responseBody": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folder-items?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd&job_id=b40457f7-e145-4a8d-92a6-71b49905eb62",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:226c78480e9fe96b3d1b8692d8673c49c2e03514afd4255de3ce2612c6620238"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folder-items?folder_id=8db75aa2-3cc9-41f9-82a3-0b0b68711bcd&job_id=b30c24cf-3748-4544-a2ee-d1afe8ce9bf4",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:3bd54112ef634d0b03aa5f8fca60cbd2f812863565b59cde50570f4c8ba9a341"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/tours",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:3436de9059dbe46cc1eefd79a4a3b09c43d95ba07d5ba9a4235fb4df1c1e2fc1"
+    },
+    {
+      "method": "GET",
+      "url": "https://fnf-api-gw.higgsfield.ai/fnf/folders/8db75aa2-3cc9-41f9-82a3-0b0b68711bcd",
+      "status": 200,
+      "requestBody": null,
+      "responseBody": "sha256:257e1eec15f9e6841dec60d5d0a52fa75020eda706cc5c956d03d1ec11ec22dc"
+    }
+  ]
+}

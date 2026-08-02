@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import captureFixture from './__fixtures__/cinema-studio-captures.json';
 import { type RawCaptureContent, isDenylistedCaptureUrl, isDuplicateCapture } from './capture';
 
 const HOST = 'https://fnf-api-gw.higgsfield.ai';
@@ -77,5 +78,89 @@ describe('isDuplicateCapture', () => {
   it('retains a differing HTTP status or request body', () => {
     expect(isDuplicateCapture(poll(), poll({ status: 500 }))).toBe(false);
     expect(isDuplicateCapture(poll(), poll({ requestBody: '{"ids":["a"]}' }))).toBe(false);
+  });
+});
+
+describe('retention rules replayed over the real cinema-studio HAR', () => {
+  // Real 62-request `fnf-api-gw` capture from ADR-0007's measured cinema-studio
+  // session (input/higgfield/image/cinema-studio/cinemastudio.har), CORS-preflight
+  // OPTIONS and non-fnf hosts dropped (the fetch probe never sees them) and bodies
+  // sha256-hashed — PII-free but byte-equality preserving, which is all the two
+  // rules inspect. This pins the *measured* reduction, replacing ADR-0007's
+  // projected "~8 rows survive": that projection assumed only generation rows are
+  // kept, but the denylist deliberately keeps unrecognised endpoints (ADR-0001
+  // breadth), so 22 survive — the real number this test now guards.
+  const captures: RawCaptureContent[] = captureFixture.captures.map((c) => ({
+    method: c.method,
+    url: c.url,
+    status: c.status,
+    requestBody: c.requestBody,
+    responseBody: c.responseBody,
+  }));
+
+  /**
+   * Mirror `rawCaptures.record`'s retention pipeline: drop denylisted URLs, then
+   * drop a byte-identical repeat of the most recent *retained* capture for the
+   * same URL. Session timestamps span minutes, so the mutation's de-dup recency
+   * window (a mutation-layer concern) never fires here — the two shared rules
+   * fully determine what is kept.
+   */
+  function retain(seq: readonly RawCaptureContent[]): RawCaptureContent[] {
+    const kept: RawCaptureContent[] = [];
+    for (const c of seq) {
+      if (isDenylistedCaptureUrl(c.url)) continue;
+      const prior = [...kept].reverse().find((k) => k.url === c.url);
+      if (prior && isDuplicateCapture(prior, c)) continue;
+      kept.push(c);
+    }
+    return kept;
+  }
+
+  it('reduces the 62 observed captures to the 22 that carry signal', () => {
+    expect(captures).toHaveLength(62);
+    expect(retain(captures)).toHaveLength(22);
+  });
+
+  it('keeps every generation / cross-check request and drops the UI chatter', () => {
+    const paths = retain(captures).map((c) => new URL(c.url).pathname);
+    // Generation + refund/identity cross-check endpoints survive.
+    expect(paths).toContain('/fnf/jobs/v2/soul_cinema_studio'); // the generate POST
+    expect(paths).toContain('/fnf/jobs/status-batch'); // batch status poll
+    expect(paths).toContain('/fnf/workspaces/wallet'); // wallet cross-check (#17)
+    expect(paths).toContain('/fnf/user'); // identity
+    // Both polled job ids survive (each status transition is a distinct row).
+    expect(paths.some((p) => p.startsWith('/fnf/jobs/b40457f7'))).toBe(true);
+    expect(paths.some((p) => p.startsWith('/fnf/jobs/b30c24cf'))).toBe(true);
+    // Denylisted noise is gone entirely.
+    for (const noise of [
+      '/fnf/folders',
+      '/fnf/tours',
+      '/fnf/banner',
+      '/fnf-notification',
+      '/fnf/referral-campaigns',
+      '/fnf/feedback',
+      '/fnf/color-presets',
+    ]) {
+      expect(paths.some((p) => p.startsWith(noise))).toBe(false);
+    }
+  });
+
+  it('collapses only byte-identical repeats — job-status transitions are all kept', () => {
+    // De-dup over the raw sequence (before the denylist) fires on the six
+    // byte-identical consecutive repeats in the session — all of them UI chatter
+    // the denylist also removes, which is why the pipeline nets zero *extra*
+    // de-dup drops here. The three status polls per job are real transitions
+    // (queued → in_progress → completed), so none collapse.
+    let collapsed = 0;
+    const kept: RawCaptureContent[] = [];
+    for (const c of captures) {
+      const prior = [...kept].reverse().find((k) => k.url === c.url);
+      if (prior && isDuplicateCapture(prior, c)) {
+        collapsed++;
+        continue;
+      }
+      kept.push(c);
+    }
+    expect(collapsed).toBe(6);
   });
 });

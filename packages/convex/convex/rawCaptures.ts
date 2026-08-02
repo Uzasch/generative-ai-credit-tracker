@@ -12,11 +12,29 @@ import { internalMutation, mutation, query } from './_generated/server';
 const RAW_CAPTURE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Upper bound on rows deleted per prune transaction. A backlog larger than this
- * is drained by rescheduling (below) rather than by one unbounded mutation, so a
- * prune can never exceed Convex's per-transaction write limits.
+ * How recent the retained prior capture must be for a byte-identical repeat to be
+ * dropped as a duplicate (finding: de-dup must not drop recent traffic). De-dup
+ * exists to collapse a burst of status polls, which land seconds-to-minutes apart
+ * within one job's lifetime, so a 1-day window covers any real poll span while
+ * sitting far below the 30-day TTL. The point: because `record` is insert-only
+ * (ADR-0001 — rows are never patched, so we cannot refresh a retained row's
+ * timestamp), collapsing a fresh observation onto a copy that is itself near the
+ * TTL would let the prune delete the copy and lose the observation entirely. With
+ * the window ≪ TTL, any row we de-dup against still has ~29 days of life left, so
+ * a fresh observation is never dropped in favour of an about-to-expire one.
  */
-const PRUNE_BATCH = 256;
+const RAW_CAPTURE_DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Upper bound on rows read+deleted per prune transaction. Each `raw_captures` row
+ * carries verbatim request/response bodies and can approach Convex's 1 MiB
+ * per-document limit, and `pruneOld` reads whole documents (Convex has no
+ * projection — `.take(n)` reads full rows). At 8 rows that is ≈ 8 MiB worst case,
+ * half of Convex's 16 MiB per-transaction *read* limit — so a batch of large rows
+ * can never trip that limit and wedge the cron. A backlog larger than one batch is
+ * drained by rescheduling (below), not by one unbounded read.
+ */
+const PRUNE_BATCH = 8;
 
 /**
  * Append a single raw capture from the extension's MAIN-world fetch probe.
@@ -53,7 +71,18 @@ export const record = mutation({
       .withIndex('by_url', (q) => q.eq('url', args.url))
       .order('desc')
       .first();
-    if (previous && isDuplicateCapture(previous, args)) return null;
+    // Only de-dup against a *sufficiently recent* copy. If the retained row is
+    // older than the de-dup window it may be near the TTL and about to be pruned;
+    // collapsing today's observation onto it would then lose the observation
+    // outright (record is insert-only, so we can't refresh the old row's clock).
+    // A repeat older than the window is treated as fresh and retained.
+    if (
+      previous &&
+      args.capturedAt - previous.capturedAt <= RAW_CAPTURE_DEDUP_WINDOW_MS &&
+      isDuplicateCapture(previous, args)
+    ) {
+      return null;
+    }
 
     return await ctx.db.insert('raw_captures', args);
   },
@@ -75,8 +104,9 @@ export const recent = query({
  * Retention-TTL prune (ADR-0007): delete raw captures older than the TTL. Run on
  * a cron (see `crons.ts`); internal so no client can trigger or parametrise it.
  * `now`/`ttlMs` are injectable for deterministic tests; production uses the
- * defaults. Deletes at most `PRUNE_BATCH` per call and reschedules itself when a
- * full batch is drained, so a large backlog never exceeds the write limit.
+ * defaults. Reads+deletes at most `PRUNE_BATCH` full rows per call and reschedules
+ * itself when a full batch is drained, so a large backlog of big-bodied rows never
+ * exceeds Convex's 16 MiB per-transaction read limit (which would wedge the cron).
  */
 export const pruneOld = internalMutation({
   args: { now: v.optional(v.number()), ttlMs: v.optional(v.number()) },
