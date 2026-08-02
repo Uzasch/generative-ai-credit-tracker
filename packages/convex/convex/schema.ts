@@ -123,6 +123,12 @@ export default defineSchema({
     .index('by_org_brand', ['organizationId', 'brandId'])
     .index('by_org_asset', ['organizationId', 'assetId'])
     .index('by_org_user', ['organizationId', 'userId'])
+    // The live tracking indicator's newest-first feed (#18): one editor's recent
+    // generations ordered by *capture time*, not Convex row-creation time. The
+    // background records events fire-and-forget, so inserts can land out of
+    // capture order; keying the order on `capturedAt` makes "newest-first" mean
+    // newest generated, so `.order('desc')` returns the genuinely most recent.
+    .index('by_org_user_captured', ['organizationId', 'userId', 'capturedAt'])
     // The gallery's per-editor intake tray: one editor's unattributed events.
     // Scoped by org + user (the gallery is a single editor's surface, ADR-0004)
     // and narrowed to the `'unattributed'` sentinel, so it never scans another

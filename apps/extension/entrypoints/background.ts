@@ -1,5 +1,5 @@
 import { loadActiveContext } from '@/lib/activeContext';
-import { RecentActivityBadge } from '@/lib/badge';
+import { badgeText, nextBadgeExpiry, pruneCaptures } from '@/lib/badge';
 import {
   appendRawCapture,
   recordAnomaly,
@@ -86,32 +86,66 @@ const costCorrelator = new DisplayedCostCorrelator(DISPLAYED_COST_WINDOW_MS);
 const BADGE_WINDOW_MS = 120_000;
 
 /**
- * Rolling count of generations recorded within `BADGE_WINDOW_MS`, rendered onto the
- * toolbar badge. Module-level so it spans messages within one service-worker
- * lifetime; the pure counting core lives in `@/lib/badge`.
+ * Session-storage key holding the capture times inside the current badge window,
+ * and the alarm that decays them. Both are *durable* across service-worker
+ * restarts, unlike an in-memory count or a `setTimeout`: MV3 can terminate an idle
+ * worker between captures, and the toolbar badge text persists on its own — so the
+ * decay must be driven from persisted state + a browser alarm, or a badge could
+ * stay lit indefinitely after the worker that would have cleared it was killed.
+ * Session storage is used (not local) so the count is naturally ephemeral —
+ * "recent activity" resets when the browser session ends.
  */
-const activityBadge = new RecentActivityBadge(BADGE_WINDOW_MS);
+const BADGE_CAPTURES_KEY = 'badgeCaptures';
+const BADGE_DECAY_ALARM = 'badge-decay';
 
-/** Pending badge-clear timer, so a burst of captures reschedules one decay, not many. */
-let badgeClearTimer: ReturnType<typeof setTimeout> | undefined;
+/** Read the persisted badge capture times; tolerant of the first-ever (unset) read. */
+async function loadBadgeCaptures(): Promise<number[]> {
+  const stored = await browser.storage.session.get(BADGE_CAPTURES_KEY);
+  const value = stored[BADGE_CAPTURES_KEY];
+  // Trust nothing off storage: keep only finite numbers (§4 — narrow at boundaries).
+  return Array.isArray(value) ? value.filter((t): t is number => Number.isFinite(t)) : [];
+}
 
 /**
- * Flip the toolbar badge to reflect a just-recorded generation (issue #18): count
- * it into the rolling window, render the badge text, and (re)arm a timer to
- * recompute once this capture would age out — so the badge decays to empty rather
- * than showing a stale count. `browser.action` is the MV3 toolbar button; this is
- * the only side effect the badge model touches, kept out of the pure core.
+ * Render `times` onto the toolbar badge and (re)arm the decay alarm for when the
+ * oldest capture ages out. `browser.action` is the MV3 toolbar button; the alarm
+ * recomputes durably even if the worker is torn down before it fires.
  */
-function flipBadge(now: number): void {
-  browser.action.setBadgeText({ text: activityBadge.record(now) });
-  // A subtle attention colour; the badge count is the signal, not the colour alone.
-  browser.action.setBadgeBackgroundColor({ color: '#2563eb' });
-  if (badgeClearTimer !== undefined) clearTimeout(badgeClearTimer);
-  badgeClearTimer = setTimeout(() => {
-    // Recompute after decay: empties to '' (no badge) if no capture followed.
-    browser.action.setBadgeText({ text: activityBadge.text(Date.now()) });
-    badgeClearTimer = undefined;
-  }, BADGE_WINDOW_MS + 100);
+async function paintBadge(times: readonly number[]): Promise<void> {
+  await browser.action.setBadgeText({ text: badgeText(times.length) });
+  // A subtle attention colour; the count is the signal, not the colour alone.
+  await browser.action.setBadgeBackgroundColor({ color: '#2563eb' });
+  const expiry = nextBadgeExpiry(times, BADGE_WINDOW_MS);
+  if (expiry === null) {
+    await browser.alarms.clear(BADGE_DECAY_ALARM);
+  } else {
+    // `when` is absolute ms; a passed/near time fires promptly, then reschedules
+    // for the next oldest capture until the window is empty.
+    browser.alarms.create(BADGE_DECAY_ALARM, { when: expiry });
+  }
+}
+
+/**
+ * Flip the toolbar badge to reflect a just-recorded generation (issue #18): prune
+ * the persisted window, count this capture into it, persist, and repaint. Durable
+ * so a burst spanning a worker restart still decays correctly.
+ */
+async function flipBadge(now: number): Promise<void> {
+  const times = pruneCaptures(await loadBadgeCaptures(), now, BADGE_WINDOW_MS);
+  times.push(now);
+  await browser.storage.session.set({ [BADGE_CAPTURES_KEY]: times });
+  await paintBadge(times);
+}
+
+/**
+ * Decay the badge when a capture ages out (fired by the durable alarm, or replayed
+ * on worker startup): prune the persisted window, persist, and repaint — clearing
+ * the badge once nothing recent remains.
+ */
+async function decayBadge(now: number): Promise<void> {
+  const times = pruneCaptures(await loadBadgeCaptures(), now, BADGE_WINDOW_MS);
+  await browser.storage.session.set({ [BADGE_CAPTURES_KEY]: times });
+  await paintBadge(times);
 }
 
 /**
@@ -128,6 +162,17 @@ function flipBadge(now: number): void {
  * response cost to raise a `cost-mismatch` anomaly when ADR-0005's ÷100 rule broke.
  */
 export default defineBackground(() => {
+  // Recompute the badge from durable state whenever the worker (re)starts: an MV3
+  // worker can be killed with the badge still lit, so replay the decay to clear a
+  // count that has since aged out (issue #18 — recent activity, never stale).
+  void decayBadge(Date.now());
+
+  // The durable decay alarm: prune the persisted badge window and repaint, so the
+  // badge clears even if the worker that recorded the capture was long gone.
+  browser.alarms.onAlarm.addListener((alarm: { name: string }) => {
+    if (alarm.name === BADGE_DECAY_ALARM) void decayBadge(Date.now());
+  });
+
   // Only the sender's tab id is needed — to scope click↔request correlation per
   // tab. Typed structurally to that so no browser-types import is required.
   browser.runtime.onMessage.addListener((message: unknown, sender: { tab?: { id?: number } }) => {
@@ -380,7 +425,7 @@ async function handleCapture(capture: RawCapture, tabId?: number): Promise<void>
   void recordGenerationEvent(outcome);
   // Flip the toolbar badge immediately (issue #18): the recorded generation is the
   // "we got it" signal, independent of the async Convex round-trip above.
-  flipBadge(capture.capturedAt);
+  void flipBadge(capture.capturedAt);
 }
 
 /** Parse a captured body as JSON; undefined if absent or not JSON. */

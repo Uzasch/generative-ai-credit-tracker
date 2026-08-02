@@ -9,60 +9,44 @@
  * time window and the count decays to empty once activity stops.
  *
  * This module is the pure counting core (AGENTS.md §9 — test the logic, not the
- * `browser.action` glue): it owns no timers and reads no clock, so the caller
- * supplies `now` and drives the reset. The background does the `browser.action`
- * I/O around it.
+ * `browser.action` / storage / alarms glue): free functions over an array of
+ * capture times, no clock and no I/O of their own. The background persists that
+ * array and drives the decay with a durable alarm, because an MV3 service worker
+ * can be terminated between captures (an in-memory count or a `setTimeout` would
+ * be lost, leaving the badge stuck lit — the pure state lives in storage instead).
  */
 
 /** Above this the badge shows `9+` — a two-glyph badge is all the toolbar fits. */
-const MAX_SHOWN = 9;
+export const MAX_SHOWN = 9;
 
 /**
- * Counts generation captures within a rolling window and renders the badge text.
- * `record` is called when an event is recorded; `text` recomputes on demand (e.g.
- * from the caller's reset timer) so a window that has emptied clears the badge.
+ * The capture times still inside the rolling window ending at `now`. Total and
+ * pure: filtering keeps callers from mutating persisted state in place.
  */
-export class RecentActivityBadge {
-  private readonly windowMs: number;
-  /** Capture times within the window, ascending; pruned on every read. */
-  private captures: number[] = [];
+export function pruneCaptures(times: readonly number[], now: number, windowMs: number): number[] {
+  const cutoff = now - windowMs;
+  return times.filter((t) => t > cutoff);
+}
 
-  constructor(windowMs: number) {
-    this.windowMs = windowMs;
-  }
+/**
+ * The badge text for a capture count. Empty string means "no badge" — the caller
+ * clears the toolbar badge on that, so an emptied window shows nothing.
+ */
+export function badgeText(count: number): string {
+  if (count <= 0) return '';
+  return count > MAX_SHOWN ? `${MAX_SHOWN}+` : String(count);
+}
 
-  /** Drop captures older than the rolling window ending at `now`. */
-  private prune(now: number): void {
-    const cutoff = now - this.windowMs;
-    // Times are appended in order, so the survivors are a suffix; find the first
-    // one still inside the window and keep from there.
-    const firstFresh = this.captures.findIndex((t) => t > cutoff);
-    this.captures = firstFresh === -1 ? [] : this.captures.slice(firstFresh);
-  }
-
-  /**
-   * Register a generation captured at `now` and return the badge text to show.
-   * Empty string means "no badge" (never reached here — a fresh capture always
-   * counts at least itself).
-   */
-  record(now: number): string {
-    this.prune(now);
-    this.captures.push(now);
-    return this.render();
-  }
-
-  /**
-   * The badge text for the window ending at `now`, after decay. Empty string when
-   * no capture remains in the window — the caller clears the badge on that.
-   */
-  text(now: number): string {
-    this.prune(now);
-    return this.render();
-  }
-
-  private render(): string {
-    const count = this.captures.length;
-    if (count === 0) return '';
-    return count > MAX_SHOWN ? `${MAX_SHOWN}+` : String(count);
-  }
+/**
+ * When the oldest retained capture leaves the window (ms epoch), or `null` when no
+ * capture remains. The caller schedules its decay alarm for this instant, so the
+ * badge recomputes exactly when a capture ages out — then reschedules for the next
+ * oldest, until the window is empty (a single "clear after the newest" timer would
+ * leave an already-expired earlier capture in the count).
+ */
+export function nextBadgeExpiry(times: readonly number[], windowMs: number): number | null {
+  if (times.length === 0) return null;
+  let oldest = times[0] as number;
+  for (const t of times) if (t < oldest) oldest = t;
+  return oldest + windowMs;
 }

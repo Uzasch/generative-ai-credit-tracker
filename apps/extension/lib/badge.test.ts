@@ -1,44 +1,51 @@
 import { describe, expect, it } from 'vitest';
-import { RecentActivityBadge } from './badge';
+import { badgeText, nextBadgeExpiry, pruneCaptures } from './badge';
 
-const WINDOW = 60_000;
+const WINDOW = 120_000;
 
-describe('RecentActivityBadge', () => {
-  it('shows the count of captures within the rolling window', () => {
-    const badge = new RecentActivityBadge(WINDOW);
-    expect(badge.record(1000)).toBe('1');
-    expect(badge.record(2000)).toBe('2');
-    expect(badge.record(3000)).toBe('3');
+describe('pruneCaptures', () => {
+  it('keeps only captures still inside the rolling window', () => {
+    const times = [1000, 2000, 3000];
+    // Window ends at 2000 + WINDOW, so the 1000 capture (just) survives here.
+    expect(pruneCaptures(times, 1000 + WINDOW, WINDOW)).toEqual([2000, 3000]);
   });
 
-  it('decays: captures older than the window drop out of the count', () => {
-    const badge = new RecentActivityBadge(WINDOW);
-    badge.record(1000);
-    badge.record(2000);
-    // A capture arriving just past the first one's window expiry evicts it.
-    expect(badge.record(1000 + WINDOW + 1)).toBe('2'); // 2000 + the new one
-    // Read far in the future — the window is empty, so no badge.
-    expect(badge.text(1000 + 10 * WINDOW)).toBe('');
+  it('drops everything once the window has fully elapsed', () => {
+    expect(pruneCaptures([1000, 2000], 2000 + WINDOW + 1, WINDOW)).toEqual([]);
   });
 
-  it('text() reports the decayed count without recording a capture', () => {
-    const badge = new RecentActivityBadge(WINDOW);
-    badge.record(1000);
-    expect(badge.text(1000 + WINDOW / 2)).toBe('1');
-    expect(badge.text(1000 + WINDOW + 1)).toBe('');
+  it('returns a new array — it never mutates the input', () => {
+    const times = [1000, 2000];
+    const pruned = pruneCaptures(times, 1000 + WINDOW + 1, WINDOW);
+    expect(pruned).toEqual([2000]);
+    expect(times).toEqual([1000, 2000]);
+  });
+});
+
+describe('badgeText', () => {
+  it('renders the count within the window', () => {
+    expect(badgeText(1)).toBe('1');
+    expect(badgeText(3)).toBe('3');
   });
 
   it('caps the displayed count at 9+', () => {
-    const badge = new RecentActivityBadge(WINDOW);
-    let text = '';
-    for (let i = 0; i < 12; i++) {
-      text = badge.record(1000 + i);
-    }
-    expect(text).toBe('9+');
+    expect(badgeText(10)).toBe('9+');
+    expect(badgeText(42)).toBe('9+');
   });
 
-  it('an empty badge renders the clear sentinel (empty string)', () => {
-    const badge = new RecentActivityBadge(WINDOW);
-    expect(badge.text(1000)).toBe('');
+  it('an empty window renders the clear sentinel (empty string)', () => {
+    expect(badgeText(0)).toBe('');
+  });
+});
+
+describe('nextBadgeExpiry', () => {
+  it('is the oldest capture plus the window — not the newest', () => {
+    // Captures at 0s and 119s: the first ages out at 120s, so decay is scheduled
+    // then (a "clear after the newest" timer would leave the first counted).
+    expect(nextBadgeExpiry([0, 119_000], WINDOW)).toBe(WINDOW);
+  });
+
+  it('is null when there are no captures', () => {
+    expect(nextBadgeExpiry([], WINDOW)).toBeNull();
   });
 });

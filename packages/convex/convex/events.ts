@@ -47,6 +47,16 @@ const jobOutcome = v.object({
  * changes again. Every terminal status — `completed` and the failures
  * (`failed`, `nsfw`) — shares the terminal rank.
  */
+/**
+ * Upper bound on how many of an org's most-recent Flagged anomalies the live
+ * indicator scans to resolve each row's `flagged` status (#18). Anomalies are
+ * observed at ~the same time as the generation they reference, so the newest
+ * anomalies cover everything that could flag the recent events shown; bounding the
+ * read keeps the reactive query from materialising an org's whole append-only
+ * anomaly history (which would grow without bound and risk Convex read limits).
+ */
+const RECENT_ANOMALY_SCAN_LIMIT = 256;
+
 const STATUS_RANK: Record<JobStatus, number> = {
   queued: 0,
   in_progress: 1,
@@ -432,30 +442,45 @@ export const generationsByUser = query({
  *
  * The `flagged` status needs the org's Flagged anomalies (#8): they live in a
  * separate table and link back to a generation by job-set `toolRef`
- * (`cost-mismatch`) or by job id (`unknown-status`). We read them once through the
- * org-scoped `by_org_observed_at` index, index the links with `collectAnomalyRefs`,
- * and mark each row via `isEventFlagged` — so classifying the page of events is
- * O(events + anomalies), and the status derivation stays the single shared
- * `lifecycleStatus` (AGENTS.md §6). A raw `click-no-request` anomaly references no
- * generation (it has neither), so it never flags a row here.
+ * (`cost-mismatch`) or by job id (`unknown-status`), matched within the same tool.
+ * We read the org's *recent* anomalies through the `by_org_observed_at` index,
+ * index the links with `collectAnomalyRefs`, and mark each row via `isEventFlagged`
+ * — so the status derivation stays the single shared `lifecycleStatus` (AGENTS.md
+ * §6). A raw `click-no-request` anomaly references no generation (it has neither),
+ * so it never flags a row here.
  */
 export const recentGenerations = query({
   args: { organizationId: v.string(), userId: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { organizationId, userId, limit }) => {
     const events = await ctx.db
       .query('events')
-      .withIndex('by_org_user', (q) => q.eq('organizationId', organizationId).eq('userId', userId))
+      // Order by CAPTURE time, not row-creation time: the background records events
+      // fire-and-forget, so inserts can land out of capture order and a plain
+      // `by_org_user` scan would return the wrong "most recent" set (#18).
+      .withIndex('by_org_user_captured', (q) =>
+        q.eq('organizationId', organizationId).eq('userId', userId),
+      )
       .order('desc')
       // Default to a small window — the indicator shows *recent* activity, not the
       // full feed (that is the gallery's `generationsByUser`).
       .take(limit ?? 20);
 
     // The event's link to any Flagged anomaly is scoped to the SAME org (ADR-0004):
-    // an anomaly can never flag a row for a generation in another tenant.
+    // an anomaly can never flag a row for a generation in another tenant. Bound the
+    // read to the org's most-recent anomalies (newest-first via `by_org_observed_at`)
+    // rather than its whole append-only history: an anomaly is observed at ~the same
+    // time as the generation it references (a cost-mismatch on the generate
+    // response, an unknown-status on a status poll seconds later), so the recent
+    // window covers everything that could flag these recent events, while a full
+    // `.collect()` would grow unbounded and risk Convex read limits.
+    // (Follow-up for exact per-event lookup: denormalise a tool-scoped key onto the
+    // anomaly row so `unknown-status` — which carries only a jobId in `evidence` —
+    // can be indexed like `cost-mismatch`'s `toolRef`; that touches #8's write path.)
     const anomalies = await ctx.db
       .query('flagged_anomalies')
       .withIndex('by_org_observed_at', (q) => q.eq('organizationId', organizationId))
-      .collect();
+      .order('desc')
+      .take(RECENT_ANOMALY_SCAN_LIMIT);
     const refs = collectAnomalyRefs(anomalies);
 
     return events.map((event) => toRecentGeneration(event, isEventFlagged(event, refs)));

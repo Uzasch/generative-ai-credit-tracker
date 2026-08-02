@@ -70,27 +70,52 @@ describe('collectAnomalyRefs / isEventFlagged', () => {
   };
 
   it('links a cost-mismatch anomaly to its event by toolRef', () => {
-    const refs = collectAnomalyRefs([{ toolRef: 'jobset_1', evidence: costMismatch }]);
-    expect(isEventFlagged({ toolRef: 'jobset_1', jobs: [] }, refs)).toBe(true);
-    expect(isEventFlagged({ toolRef: 'jobset_2', jobs: [] }, refs)).toBe(false);
+    const refs = collectAnomalyRefs([
+      { tool: 'higgsfield', toolRef: 'jobset_1', evidence: costMismatch },
+    ]);
+    expect(isEventFlagged({ tool: 'higgsfield', toolRef: 'jobset_1', jobs: [] }, refs)).toBe(true);
+    expect(isEventFlagged({ tool: 'higgsfield', toolRef: 'jobset_2', jobs: [] }, refs)).toBe(false);
   });
 
   it('links an unknown-status anomaly to its event by job id (it carries no toolRef)', () => {
-    const refs = collectAnomalyRefs([{ evidence: unknownStatus }]);
+    const refs = collectAnomalyRefs([{ tool: 'higgsfield', evidence: unknownStatus }]);
     expect(refs.toolRefs.size).toBe(0);
-    expect(isEventFlagged({ toolRef: 'jobset_1', jobs: [{ jobId: 'job_9' }] }, refs)).toBe(true);
-    expect(isEventFlagged({ toolRef: 'jobset_1', jobs: [{ jobId: 'job_1' }] }, refs)).toBe(false);
+    expect(
+      isEventFlagged({ tool: 'higgsfield', toolRef: 'jobset_1', jobs: [{ jobId: 'job_9' }] }, refs),
+    ).toBe(true);
+    expect(
+      isEventFlagged({ tool: 'higgsfield', toolRef: 'jobset_1', jobs: [{ jobId: 'job_1' }] }, refs),
+    ).toBe(false);
+  });
+
+  it('does not flag an event from a different tool whose id string collides', () => {
+    // `toolRef`/`jobId` are only unique within a tool; a colliding id from another
+    // provider must not contaminate this event's status.
+    const refs = collectAnomalyRefs([
+      { tool: 'flow', toolRef: 'jobset_1', evidence: costMismatch },
+      { tool: 'flow', evidence: unknownStatus }, // jobId job_9
+    ]);
+    expect(isEventFlagged({ tool: 'higgsfield', toolRef: 'jobset_1', jobs: [] }, refs)).toBe(false);
+    expect(isEventFlagged({ tool: 'kling', toolRef: 'x', jobs: [{ jobId: 'job_9' }] }, refs)).toBe(
+      false,
+    );
+    // The same tool still matches.
+    expect(isEventFlagged({ tool: 'flow', toolRef: 'jobset_1', jobs: [] }, refs)).toBe(true);
   });
 
   it('a raw click-no-request anomaly references no event (no toolRef, no jobId)', () => {
-    const refs = collectAnomalyRefs([{ evidence: clickNoRequest }]);
+    const refs = collectAnomalyRefs([{ tool: 'higgsfield', evidence: clickNoRequest }]);
     expect(refs.toolRefs.size).toBe(0);
     expect(refs.jobIds.size).toBe(0);
-    expect(isEventFlagged({ toolRef: 'jobset_1', jobs: [{ jobId: 'job_9' }] }, refs)).toBe(false);
+    expect(
+      isEventFlagged({ tool: 'higgsfield', toolRef: 'jobset_1', jobs: [{ jobId: 'job_9' }] }, refs),
+    ).toBe(false);
   });
 
   it('an event with no toolRef is never matched by toolRef alone', () => {
-    const refs = collectAnomalyRefs([{ toolRef: 'jobset_1', evidence: costMismatch }]);
-    expect(isEventFlagged({ jobs: [] }, refs)).toBe(false);
+    const refs = collectAnomalyRefs([
+      { tool: 'higgsfield', toolRef: 'jobset_1', evidence: costMismatch },
+    ]);
+    expect(isEventFlagged({ tool: 'higgsfield', jobs: [] }, refs)).toBe(false);
   });
 });
