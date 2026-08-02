@@ -44,37 +44,30 @@ export function App() {
     };
   }, []);
 
-  // Once the catalog is loaded and nothing was restored, default the login and
-  // Org/Brand to the first seeded values — but never an Active Asset, so a
-  // generation made before the editor picks one is recorded unattributed.
+  // Once the catalog is loaded and nothing was restored, default the Org and —
+  // since identity is org-scoped (ADR-0004) — its first login and first Brand,
+  // but never an Active Asset, so a generation made before the editor picks one
+  // is recorded unattributed.
   useEffect(() => {
-    if (!hydrated || !catalog) return;
-    if (userId === null) setUserId(catalog.users[0]?.userId ?? null);
-    if (organizationId === null) {
-      const firstOrg = catalog.orgs[0];
-      if (firstOrg) {
-        setOrganizationId(firstOrg.organizationId);
-        setBrandId(firstOrg.brands[0]?.brandId ?? null);
-      }
-    }
-  }, [hydrated, catalog, userId, organizationId]);
+    if (!hydrated || !catalog || organizationId !== null) return;
+    const firstOrg = catalog.orgs[0];
+    if (!firstOrg) return;
+    setOrganizationId(firstOrg.organizationId);
+    setUserId(firstOrg.users[0]?.userId ?? null);
+    setBrandId(firstOrg.brands[0]?.brandId ?? null);
+  }, [hydrated, catalog, organizationId]);
 
   const org = catalog?.orgs.find((o) => o.organizationId === organizationId) ?? null;
   const brand = org?.brands.find((b) => b.brandId === brandId) ?? null;
   const asset = brand?.assets.find((a) => a.assetId === assetId) ?? null;
 
   // Persist the Active context on every change once identity + Org + Brand exist.
+  // The tool seat is captured from tool traffic (ADR-0004), not stored here.
   useEffect(() => {
     if (!hydrated || !userId || !organizationId || !brandId) return;
-    const ctx: ActiveContext = {
-      organizationId,
-      userId,
-      brandId,
-      assetId,
-      toolAccount: org?.toolAccount,
-    };
+    const ctx: ActiveContext = { organizationId, userId, brandId, assetId };
     void saveActiveContext(ctx);
-  }, [hydrated, userId, organizationId, brandId, assetId, org?.toolAccount]);
+  }, [hydrated, userId, organizationId, brandId, assetId]);
 
   if (catalog === undefined) {
     return (
@@ -87,6 +80,9 @@ export function App() {
   function selectOrg(nextOrgId: string) {
     const nextOrg = catalog?.orgs.find((o) => o.organizationId === nextOrgId) ?? null;
     setOrganizationId(nextOrgId);
+    // Identity is strictly org-scoped (ADR-0004): re-establish the login from the
+    // new Org's own roster rather than carrying the previous Org's editor across.
+    setUserId(nextOrg?.users[0]?.userId ?? null);
     setBrandId(nextOrg?.brands[0]?.brandId ?? null);
     setAssetId(null); // switching Org invalidates the Active Asset.
   }
@@ -126,19 +122,6 @@ export function App() {
 
       <div className="space-y-3">
         <SelectField
-          id="user"
-          label="Editor (our login)"
-          value={userId ?? ''}
-          onChange={(v) => setUserId(v || null)}
-        >
-          {catalog.users.map((u) => (
-            <option key={u.userId} value={u.userId}>
-              {u.displayName}
-            </option>
-          ))}
-        </SelectField>
-
-        <SelectField
           id="org"
           label="Organization"
           value={organizationId ?? ''}
@@ -147,6 +130,20 @@ export function App() {
           {catalog.orgs.map((o) => (
             <option key={o.organizationId} value={o.organizationId}>
               {o.name}
+            </option>
+          ))}
+        </SelectField>
+
+        <SelectField
+          id="user"
+          label="Editor (our login for this Org)"
+          value={userId ?? ''}
+          onChange={(v) => setUserId(v || null)}
+          disabled={!org}
+        >
+          {org?.users.map((u) => (
+            <option key={u.userId} value={u.userId}>
+              {u.displayName}
             </option>
           ))}
         </SelectField>

@@ -33,13 +33,28 @@ function asResponse(fixture: {
 }
 
 describe('higgsfieldAdapter.extract — generate responses', () => {
-  it('reads a paid image generate: cost 100, job-set toolRef, prompt, one child job', () => {
+  it('reads a paid image generate: cost 100, job-set toolRef, prompt, one child job, tool seat', () => {
     const usage = higgsfieldAdapter.extract(asResponse(paidImage));
     expect(usage).not.toBeNull();
     expect(usage?.cost).toBe(100);
     expect(usage?.toolRef).toBe('c7d61713-24df-4195-85fd-e9846f092405');
     expect(usage?.jobIds).toEqual(['0b836048-2df4-455d-b513-6d248d544fec']);
     expect(usage?.prompt).toMatch(/^2D hand-drawn cartoon/);
+    // The shared tool seat is captured as metadata (ADR-0004), from the job's
+    // tool-side `user_id` (stripped to 'REDACTED_USER' in the fixture).
+    expect(usage?.toolAccount).toBe('REDACTED_USER');
+  });
+
+  it('leaves toolAccount undefined when the generate response carries no job user_id', () => {
+    const noSeat: CapturedResponse = {
+      url: 'https://fnf-api-gw.higgsfield.ai/fnf/jobs/v2/nano_banana',
+      method: 'POST',
+      status: 200,
+      body: {
+        job_sets: [{ id: 'js_1', cost: 100, params: { prompt: 'x' }, jobs: [{ id: 'j1' }] }],
+      },
+    };
+    expect(higgsfieldAdapter.extract(noSeat)?.toolAccount).toBeUndefined();
   });
 
   it('reads a free generate (cost null) as cost 0', () => {

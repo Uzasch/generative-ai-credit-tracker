@@ -8,24 +8,26 @@ import {
 } from './attribute';
 import type { GenerationEvent } from './index';
 
-/** A representative Higgsfield extraction: a paid image generation, two jobs. */
+/** A representative Higgsfield extraction: a paid image generation, two jobs.
+ *  `toolAccount` is the shared seat observed in the tool's own traffic. */
 const extracted: ExtractedGeneration = {
   tool: 'higgsfield',
   cost: 500,
   prompt: 'a red bicycle',
   jobIds: ['job_a', 'job_b'],
   toolRef: 'jobset_123',
+  toolAccount: 'higgs_seat_xyz',
   capturedAt: 1_700_000_000_000,
   ruleVersion: 1,
 };
 
-/** An editor who has picked an Active Asset. */
+/** An editor who has picked an Active Asset. Identity only — the tool seat is
+ *  captured from traffic, not chosen here (ADR-0004). */
 const withAsset: ActiveContext = {
   organizationId: 'org_1',
   userId: 'user_ada',
   brandId: 'brand_acme',
   assetId: 'asset_song_1',
-  toolAccount: 'aibusiness@studio.example',
 };
 
 describe('attribute', () => {
@@ -41,6 +43,7 @@ describe('attribute', () => {
       userId: 'user_ada',
       brandId: 'brand_acme',
       assetId: 'asset_song_1',
+      assignment: { status: 'assigned' },
       tool: 'higgsfield',
       cost: 500,
       prompt: 'a red bicycle',
@@ -51,7 +54,7 @@ describe('attribute', () => {
       refund: { kind: 'none' },
       capturedAt: 1_700_000_000_000,
       toolRef: 'jobset_123',
-      toolAccount: 'aibusiness@studio.example',
+      toolAccount: 'higgs_seat_xyz',
       ruleVersion: 1,
     });
   });
@@ -66,9 +69,11 @@ describe('attribute', () => {
     expect(isFlaggedAnomaly(result)).toBe(false);
     if (isFlaggedAnomaly(result)) throw new Error('expected a GenerationEvent');
 
-    // `'unattributed'` is the flag: the charge is recorded, rolls up to Brand +
-    // Org, and is later resolved by Assignment.
+    // `'unattributed'` sentinel + the explicit `needs-assignment` flag: the
+    // charge is recorded, rolls up to Brand + Org, and is later resolved by
+    // Assignment.
     expect(result.assetId).toBe('unattributed');
+    expect(result.assignment).toStrictEqual({ status: 'needs-assignment' });
     expect(result.cost).toBe(500);
     // Identity and brand are still stamped — only the asset is missing.
     expect(result.organizationId).toBe('org_1');
@@ -97,9 +102,13 @@ describe('attribute', () => {
     expect(pending.refund).toStrictEqual({ kind: 'pending' });
   });
 
-  it('omits toolAccount when the context has none (ADR-0004: metadata only, never required)', () => {
-    const { toolAccount: _drop, ...withoutSeat } = withAsset;
-    const result = attribute(extracted, withoutSeat);
+  it('stamps the captured tool seat, and leaves it undefined when the tool exposed none (ADR-0004: metadata only)', () => {
+    const stamped = attribute(extracted, withAsset);
+    if (isFlaggedAnomaly(stamped)) throw new Error('expected a GenerationEvent');
+    expect(stamped.toolAccount).toBe('higgs_seat_xyz');
+
+    const { toolAccount: _drop, ...noSeat } = extracted;
+    const result = attribute(noSeat, withAsset);
     if (isFlaggedAnomaly(result)) throw new Error('expected a GenerationEvent');
     expect(result.toolAccount).toBeUndefined();
   });

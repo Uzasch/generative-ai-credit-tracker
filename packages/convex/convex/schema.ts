@@ -12,6 +12,11 @@ const refundState = v.union(
   v.object({ kind: v.literal('refunded'), amount: v.number(), at: v.number() }),
 );
 
+const assignmentState = v.union(
+  v.object({ status: v.literal('assigned') }),
+  v.object({ status: v.literal('needs-assignment') }),
+);
+
 const jobOutcome = v.object({
   jobId: v.string(),
   status: v.union(
@@ -50,6 +55,9 @@ export default defineSchema({
     cost: v.number(),
     jobs: v.array(jobOutcome),
     refund: refundState,
+    // 'needs-assignment' mirrors the `'unattributed'` assetId sentinel; an editor
+    // resolves it to 'assigned' via Assignment (CONTEXT.md).
+    assignment: assignmentState,
     capturedAt: v.number(),
     toolRef: v.optional(v.string()),
     toolAccount: v.optional(v.string()),

@@ -5,20 +5,21 @@ import { query } from './_generated/server';
  * Hardcoded selection catalog for issue #5. Real Org / Brand / Asset / User CRUD
  * is out of scope, so the popup's Org → Brand → Asset picker and its minimal
  * login roster are served from this constant rather than persisted tables. Every
- * generation is still scoped to exactly one Organization (ADR-0004); seeding two
- * orgs only makes the picker exercise real branching — it does not weaken
- * per-org isolation, which the `events` roll-up queries enforce.
+ * generation is scoped to exactly one Organization (ADR-0004), and each Org owns
+ * its own logins — seeding two orgs exercises the picker's branching without
+ * weakening per-org isolation (an editor under one Org is a distinct login from
+ * the same person under another). The shared tool seat is NOT seeded here: it is
+ * captured from the tool's own traffic as metadata (ADR-0004), never chosen.
  */
 const CATALOG: SeedCatalog = {
-  users: [
-    { userId: 'user_ada', displayName: 'Ada (Editor)' },
-    { userId: 'user_grace', displayName: 'Grace (Editor)' },
-  ],
   orgs: [
     {
       organizationId: 'org_northwind',
       name: 'Northwind Studios',
-      toolAccount: 'aibusiness@northwind.example',
+      users: [
+        { userId: 'user_ada', displayName: 'Ada (Editor)' },
+        { userId: 'user_grace', displayName: 'Grace (Editor)' },
+      ],
       brands: [
         {
           brandId: 'brand_aurora',
@@ -38,7 +39,7 @@ const CATALOG: SeedCatalog = {
     {
       organizationId: 'org_globex',
       name: 'Globex Media',
-      toolAccount: 'aibusiness@globex.example',
+      users: [{ userId: 'user_hopper', displayName: 'Hopper (Editor)' }],
       brands: [
         {
           brandId: 'brand_pulse',

@@ -42,7 +42,7 @@ export type ToolAdapter = {
   extract: (res: CapturedResponse) => ExtractedUsage | null;
 };
 
-export type ExtractedUsage = Pick<GenerationEvent, 'cost' | 'toolRef'> & {
+export type ExtractedUsage = Pick<GenerationEvent, 'cost' | 'toolRef' | 'toolAccount'> & {
   /** The generation prompt when the response carries one. */
   prompt?: string;
   /**

@@ -26,17 +26,20 @@ export type SeedBrand = {
   assets: SeedAsset[];
 };
 
-/** The tenant. Every generation is scoped to exactly one of these (ADR-0004). */
+/**
+ * The tenant. Every generation is scoped to exactly one of these (ADR-0004),
+ * and each Org owns its own logins: identity is strictly org-scoped, so a person
+ * in two Orgs has two logins (ADR-0004) rather than one login shared across them.
+ */
 export type SeedOrg = {
   organizationId: string;
   name: string;
-  /** Shared tool seat used under this org, stamped as event metadata (ADR-0004). */
-  toolAccount?: string;
+  /** The editors who log in under this Org — its own roster, not a global one. */
+  users: SeedUser[];
   brands: SeedBrand[];
 };
 
 /** The full hardcoded selection catalog returned by the Convex `seed:catalog` query. */
 export type SeedCatalog = {
-  users: SeedUser[];
   orgs: SeedOrg[];
 };

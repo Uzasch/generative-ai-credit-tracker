@@ -8,6 +8,11 @@ const refundState = v.union(
   v.object({ kind: v.literal('refunded'), amount: v.number(), at: v.number() }),
 );
 
+const assignmentState = v.union(
+  v.object({ status: v.literal('assigned') }),
+  v.object({ status: v.literal('needs-assignment') }),
+);
+
 const jobOutcome = v.object({
   jobId: v.string(),
   status: v.union(
@@ -31,17 +36,21 @@ export const record = mutation({
     cost: v.number(),
     jobs: v.optional(v.array(jobOutcome)),
     refund: v.optional(refundState),
+    assignment: v.optional(assignmentState),
     capturedAt: v.number(),
     toolRef: v.optional(v.string()),
     toolAccount: v.optional(v.string()),
     ruleVersion: v.number(),
   },
   handler: async (ctx, args) => {
-    const { refund, jobs, ...rest } = args;
+    const { refund, jobs, assignment, ...rest } = args;
     return await ctx.db.insert('events', {
       ...rest,
       jobs: jobs ?? [],
       refund: refund ?? { kind: 'none' },
+      // An event with an explicit Active Asset defaults to 'assigned'; the
+      // extension always passes 'needs-assignment' for an unattributed capture.
+      assignment: assignment ?? { status: 'assigned' },
     });
   },
 });

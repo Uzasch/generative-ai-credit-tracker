@@ -87,6 +87,7 @@ async function attributeAndRecord(
     prompt: usage.prompt,
     jobIds: usage.jobIds,
     toolRef: usage.toolRef,
+    toolAccount: usage.toolAccount,
     refund: usage.refund,
     capturedAt,
     ruleVersion: RULE_VERSION,

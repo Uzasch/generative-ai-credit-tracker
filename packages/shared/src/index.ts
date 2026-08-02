@@ -16,6 +16,14 @@ export type RefundState =
   | { kind: 'pending' }
   | { kind: 'refunded'; amount: number; at: number };
 
+/**
+ * Whether the event is attributed to an Asset. `'needs-assignment'` is the
+ * explicit flag on an Unattributed Generation event (its `assetId` is the
+ * `'unattributed'` sentinel); an editor later resolves it via Assignment
+ * (CONTEXT.md), flipping it to `'assigned'`. Distinct from a Flagged anomaly.
+ */
+export type AssignmentState = { status: 'assigned' } | { status: 'needs-assignment' };
+
 /** Lifecycle of a single job within a generation's job set. */
 export type JobStatus = 'queued' | 'in_progress' | 'completed' | 'failed';
 
@@ -56,6 +64,12 @@ export type GenerationEvent = {
   /** Child jobs of this generation; may be empty. */
   jobs: JobOutcome[];
   refund: RefundState;
+  /**
+   * Whether this event is attributed to an Asset. `'needs-assignment'` when
+   * captured with no Active Asset (mirrors the `'unattributed'` `assetId`
+   * sentinel); resolved to `'assigned'` by Assignment.
+   */
+  assignment: AssignmentState;
   /** Client capture time, ms since epoch. */
   capturedAt: number;
   /** Tool-side job/request id, used to reconcile refunds. */

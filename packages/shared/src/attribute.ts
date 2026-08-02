@@ -16,6 +16,12 @@ export type ExtractedGeneration = {
   jobIds: string[];
   /** Tool-side job-set id, used to reconcile refunds. */
   toolRef?: string;
+  /**
+   * The shared tool seat observed in the tool's own traffic (e.g. Higgsfield's
+   * `job_sets[].jobs[].user_id`), captured as metadata only — never our editor
+   * identity (ADR-0004). Undefined when the tool did not expose one.
+   */
+  toolAccount?: string;
   refund?: RefundState;
   capturedAt: number;
   ruleVersion: number;
@@ -25,7 +31,8 @@ export type ExtractedGeneration = {
  * The attribution context an editor establishes in the popup: their identity
  * from our own login (never the tool seat — ADR-0004) and the Org / Brand /
  * Active Asset they're currently working under. `assetId` is `null` when no
- * Active Asset is selected.
+ * Active Asset is selected. The tool seat is not here — it is captured from tool
+ * traffic (see {@link ExtractedGeneration.toolAccount}), not chosen in the popup.
  */
 export type ActiveContext = {
   organizationId: string;
@@ -33,8 +40,6 @@ export type ActiveContext = {
   brandId: string;
   /** The Active Asset, or `null` when the editor has none selected. */
   assetId: string | null;
-  /** Shared tool seat (e.g. `aibusiness@…`), captured as metadata only (ADR-0004). */
-  toolAccount?: string;
 };
 
 /**
@@ -74,8 +79,9 @@ export function attribute(
     organizationId: ctx.organizationId,
     userId: ctx.userId,
     brandId: ctx.brandId,
-    // `null` Active Asset ⇒ the `'unattributed'` sentinel = the needs-assignment flag.
+    // `null` Active Asset ⇒ the `'unattributed'` sentinel, flagged for assignment.
     assetId: ctx.assetId ?? 'unattributed',
+    assignment: ctx.assetId === null ? { status: 'needs-assignment' } : { status: 'assigned' },
     tool: extracted.tool,
     cost: extracted.cost,
     prompt: extracted.prompt,
@@ -83,7 +89,8 @@ export function attribute(
     refund: extracted.refund ?? { kind: 'none' },
     capturedAt: extracted.capturedAt,
     toolRef: extracted.toolRef,
-    toolAccount: ctx.toolAccount,
+    // The tool seat comes from observed traffic, not the popup (ADR-0004).
+    toolAccount: extracted.toolAccount,
     ruleVersion: extracted.ruleVersion,
   };
 }

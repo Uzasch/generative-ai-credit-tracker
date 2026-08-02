@@ -95,12 +95,13 @@ type GenerationEvent = {
   userId: string;           // the editor, from OUR login — not the tool seat (ADR-0004)
   tool: 'flow' | 'higgsfield' | 'kling';
   brandId: string;          // IP under the org — top-level roll-up
-  assetId: string | 'unattributed';  // Active Asset at capture; 'unattributed' + flag if none
+  assetId: string | 'unattributed';  // Active Asset at capture; 'unattributed' sentinel if none
+  assignment: AssignmentState; // 'needs-assignment' mirrors the 'unattributed' sentinel; resolved by Assignment
   cost: number;             // credits from job_sets[].cost; 0 when the tool charged nothing (free)
   prompt?: string;          // generation prompt — shown in the generation gallery
   jobs: JobOutcome[];       // one per output in the batch (event = one Job set)
   refund: RefundState;      // discriminated union; per-job refunds net into amount
-  toolAccount?: string;     // shared tool seat (e.g. aibusiness@) — metadata only
+  toolAccount?: string;     // shared tool seat (e.g. Higgsfield job user_id) — captured metadata only
   toolRef: string;          // tool-side job-set id, for reconciliation
   ruleVersion: number;      // detection-rule version that produced this event (ADR-0003)
   capturedAt: number;       // client ms epoch
@@ -116,6 +117,10 @@ type RefundState =
   | { kind: 'none' }
   | { kind: 'pending' }
   | { kind: 'refunded'; amount: number; at: number };
+
+type AssignmentState =
+  | { status: 'assigned' }
+  | { status: 'needs-assignment' };  // captured with no Active Asset; resolved by Assignment
 ```
 
 - Roll-ups: `event → asset → brand → org`, and independently `event → user`
