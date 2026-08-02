@@ -9,6 +9,12 @@ import { v } from 'convex/values';
 const refundState = v.union(
   v.object({ kind: v.literal('none') }),
   v.object({ kind: v.literal('pending') }),
+  // `amount` is a client-influenced magnitude (it originates in captured tool
+  // traffic and nets directly out of Asset/Brand/Org usage). Convex field
+  // validators are structural and cannot reject NaN/Infinity/negative, so every
+  // mutation that writes a refund guards it at the write boundary with
+  // `assertRefundAmount` (@token-tracker/shared) before it reaches this table —
+  // a negative amount would *inflate* net usage rather than net it out.
   v.object({ kind: v.literal('refunded'), amount: v.number(), at: v.number() }),
 );
 

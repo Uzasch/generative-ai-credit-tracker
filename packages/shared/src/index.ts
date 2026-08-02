@@ -114,6 +114,18 @@ export {
 // Seed selection catalog for the popup's Org → Brand → Asset picker + login roster.
 export type { SeedAsset, SeedBrand, SeedCatalog, SeedOrg, SeedUser } from './seed';
 
+// Refund detection: the pure step that turns a failure-terminal job status into
+// a `refunded` transition, and the independent wallet-delta cross-check of its
+// amount (issue #17).
+export {
+  type RefundMismatch,
+  type Refunded,
+  assertRefundAmount,
+  crossCheckRefund,
+  isValidRefundAmount,
+  refundForStatus,
+} from './refund';
+
 /**
  * Type guard for a job status observed in captured traffic. A status string we
  * don't recognise is never coerced — the caller flags it instead of guessing
