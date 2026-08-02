@@ -28,6 +28,9 @@ __pycache__/
 # Stripped fixtures for tests live under test dirs, not here.
 input/
 
+# tool scratch state (impeccable runtime: heartbeats, question state — never linted/committed)
+.impeccable/
+
 # misc
 .DS_Store
 *.log
