@@ -1,4 +1,11 @@
-import type { JobStatus } from '@token-tracker/shared';
+import {
+  type JobStatus,
+  type RefundMismatch,
+  assertRefundAmount,
+  crossCheckRefund,
+  isFailureStatus,
+  refundForStatus,
+} from '@token-tracker/shared';
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { sumNet } from './rollups';
@@ -64,6 +71,10 @@ export const record = mutation({
   },
   handler: async (ctx, args) => {
     const { refund, jobs, assignment, ...rest } = args;
+    // A refund amount is a client-influenced magnitude (it originates in captured
+    // tool traffic), so bound it at the write boundary — Convex field validators
+    // are structural and can't reject NaN/Infinity/negative (shared §refund).
+    if (refund?.kind === 'refunded') assertRefundAmount(refund.amount);
     // The assignment flag mirrors the `'unattributed'` assetId sentinel
     // (AGENTS.md §6). Derive the expected value here — this is the source of
     // truth's write boundary — so a contradictory event can never be persisted:
@@ -90,6 +101,9 @@ export const record = mutation({
 export const markRefunded = mutation({
   args: { toolRef: v.string(), amount: v.number(), at: v.number() },
   handler: async (ctx, { toolRef, amount, at }) => {
+    // Bound the client-influenced magnitude before it enters the billing path
+    // (reject NaN/Infinity/negative; shared §refund).
+    assertRefundAmount(amount);
     const event = await ctx.db
       .query('events')
       .withIndex('by_tool_ref', (q) => q.eq('toolRef', toolRef))
@@ -115,6 +129,17 @@ export const markRefunded = mutation({
  * poll); it is never cleared by a status-only poll. Returns the patched event
  * id, or `null` when no job matched or the poll changed nothing.
  *
+ * A job advancing to a non-`completed` terminal status (`failed`, `nsfw`) means
+ * the tool refunded the full job-set `cost`, so the same patch transitions the
+ * event's `RefundState` to `refunded { amount: cost, at }` and its net usage
+ * becomes 0 (issue #17; finding refund-signal-nsfw.md rule 2). The refund is a
+ * state transition, never a delete (AGENTS.md §6); the first terminal outcome
+ * wins, so an already-`refunded` event is left untouched. The wallet
+ * `subscription_balance` delta independently cross-checks this amount out of band
+ * (see {@link crossCheckWalletRefund}), because that refund lands a few seconds
+ * after the terminal status (finding rule 4). Single-job-set case only —
+ * partial-batch refunds are parked (spec/ADR-0001).
+ *
  * Correlation is scoped to one Organization (AGENTS.md §6 — every query filters
  * by `organizationId`; ADR-0004 strict single-org isolation) and then scans that
  * org's events for the one whose `jobs[]` contains `jobId`: a job id cannot be
@@ -130,8 +155,13 @@ export const applyJobStatus = mutation({
     jobId: v.string(),
     status: jobStatus,
     mediaUrl: v.optional(v.string()),
+    // When this poll drives a refund transition, the time to attribute it to —
+    // the extension's capture time for the terminal-status poll. Optional so
+    // non-terminal polls (the common case) need not supply it; the refund lands
+    // a few seconds later regardless (finding rule 4) and is cross-checked then.
+    at: v.optional(v.number()),
   },
-  handler: async (ctx, { organizationId, jobId, status, mediaUrl }) => {
+  handler: async (ctx, { organizationId, jobId, status, mediaUrl, at }) => {
     const events = ctx.db
       .query('events')
       .withIndex('by_org', (q) => q.eq('organizationId', organizationId));
@@ -158,10 +188,85 @@ export const applyJobStatus = mutation({
             }
           : job,
       );
-      await ctx.db.patch(event._id, { jobs });
+
+      // A job that just advanced into a non-`completed` terminal ⇒ the tool
+      // refunded the full job-set cost (finding rule 2). Fold that transition
+      // into the same patch. The first terminal outcome wins, so a job already
+      // refunded is left alone; `cost` is bounded before it becomes the amount.
+      //
+      // Single-job case only (`jobs.length === 1`): `event.cost` is the whole
+      // job set's cost, so refunding it in full is correct only when the failing
+      // job *is* the whole set. For a multi-job set, one failing job does not
+      // mean the entire set was refunded — refunding `event.cost` would
+      // over-refund the siblings that may still succeed. Partial-batch
+      // reconciliation (per-job refunds netting into the amount) is deferred
+      // (spec/ADR-0001, finding refund-signal-nsfw.md); until then a multi-job
+      // set's refund state is left unchanged here.
+      const refund =
+        event.jobs.length === 1 &&
+        nextStatus !== current.status &&
+        isFailureStatus(nextStatus) &&
+        event.refund.kind !== 'refunded'
+          ? refundForStatus(nextStatus, assertRefundAmount(event.cost), at ?? Date.now())
+          : null;
+
+      await ctx.db.patch(event._id, refund ? { jobs, refund } : { jobs });
       return event._id;
     }
     return null;
+  },
+});
+
+/**
+ * Independent wallet cross-check of a recorded refund (issue #17, finding
+ * refund-signal-nsfw.md rule 3, ADR-0002). The status rule already transitioned
+ * the event to `refunded { amount: cost }`; the wallet `subscription_balance`
+ * returns to its pre-charge level by the same `cost` a few seconds later. This
+ * reconciles the observed wallet delta (from the retained `raw_captures`) against
+ * that recorded amount — matched to the event by `toolRef` — WITHOUT trusting the
+ * status alone.
+ *
+ * A read, not a write: it never overwrites the refunded amount with whatever the
+ * wallet showed (that would be guessing). Agreement is `confirmed`; a
+ * disagreement is a `mismatch` carrying the evidence, to be recorded as a Flagged
+ * anomaly (issue #8). When the status rule has not yet recorded a refund, the
+ * recorded amount is 0, so a real wallet refund surfaces as a mismatch rather
+ * than being silently accepted.
+ *
+ * Scoped to one Organization (AGENTS.md §6 — every query filters by
+ * `organizationId`; ADR-0004 strict single-org isolation): the lookup takes the
+ * caller's org and resolves the event through `by_org_tool_ref`, so a caller can
+ * never reach another tenant's event and a `toolRef` that collides across orgs
+ * stays isolated (a bare `by_tool_ref` `.unique()` would throw on the collision).
+ *
+ * NOT YET WIRED IN PRODUCTION (issue #8). Nothing calls this today: the
+ * extension neither extracts the wallet `subscription_balance` from
+ * `/fnf/workspaces/wallet` nor invokes this query, and there is no anomaly sink
+ * for a `mismatch`. Full production wiring — extract the wallet balance delta →
+ * call this cross-check → record a `mismatch` as a Flagged anomaly — lands with
+ * the flagged-anomaly recording of issue #8. Kept in place (and org-scoped) now
+ * so #8 wires an already-correct query rather than a leaky one.
+ * TODO(#8): wire wallet-delta extraction + mismatch recording; this query is the
+ * seam it plugs into.
+ */
+export const crossCheckWalletRefund = query({
+  args: { organizationId: v.string(), toolRef: v.string(), walletDelta: v.number() },
+  handler: async (
+    ctx,
+    { organizationId, toolRef, walletDelta },
+  ): Promise<
+    { kind: 'no-event' } | { kind: 'confirmed' } | { kind: 'mismatch'; mismatch: RefundMismatch }
+  > => {
+    const event = await ctx.db
+      .query('events')
+      .withIndex('by_org_tool_ref', (q) =>
+        q.eq('organizationId', organizationId).eq('toolRef', toolRef),
+      )
+      .unique();
+    if (!event) return { kind: 'no-event' };
+    const recorded = event.refund.kind === 'refunded' ? event.refund.amount : 0;
+    const mismatch = crossCheckRefund(recorded, walletDelta);
+    return mismatch === null ? { kind: 'confirmed' } : { kind: 'mismatch', mismatch };
   },
 });
 

@@ -43,6 +43,14 @@ export type JobStatusUpdateInput = {
   jobId: string;
   status: JobStatus;
   mediaUrl?: string;
+  /**
+   * When this poll drives a refund transition, the time to attribute it to —
+   * the extension's capture time for this status poll (`capture.capturedAt`), so
+   * the refund's `at` reflects when the terminal status was observed, not when
+   * the mutation happened to be delivered. Optional: non-terminal polls (the
+   * common case) need not supply it.
+   */
+  at?: number;
 };
 
 const applyJobStatus = makeFunctionReference<'mutation'>(
