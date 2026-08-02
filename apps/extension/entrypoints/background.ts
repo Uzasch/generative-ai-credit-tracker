@@ -1,6 +1,7 @@
-import { appendRawCapture, recordGenerationEvent } from '@/lib/convex';
+import { appendRawCapture, recordGenerationEvent, recordJobStatus } from '@/lib/convex';
 import { isCaptureHostUrl, isCaptureMessage } from '@/lib/messaging';
 import { type CapturedResponse, extractUsage } from '@/lib/tools';
+import { isJobStatus } from '@token-tracker/shared';
 
 /**
  * Stubbed attribution context. Real attribution — the Active Asset chosen in the
@@ -52,6 +53,23 @@ export default defineBackground(() => {
     };
     const result = extractUsage(res);
     if (!result) return;
+
+    if (result.usage.kind === 'status') {
+      // Passive outcome update from the tool's own status polls. Correlate each
+      // job back to its event and patch the matching outcome (Convex matches by
+      // job id). A status we don't recognise (e.g. `nsfw`) is ignored here — we
+      // never coerce it into a JobStatus (ADR-0002); turning it into a Flagged
+      // anomaly is the unknown-status flag (issue #8, not yet built).
+      for (const update of result.usage.updates) {
+        if (!isJobStatus(update.status)) continue;
+        void recordJobStatus({
+          jobId: update.jobId,
+          status: update.status,
+          mediaUrl: update.mediaUrl,
+        });
+      }
+      return;
+    }
 
     // Record one structured GenerationEvent per recognised generation. Cost and
     // toolRef come from the tool; org/user/brand are stubbed and the asset is

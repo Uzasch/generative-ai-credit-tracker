@@ -17,7 +17,8 @@ export type RefundState =
   | { kind: 'refunded'; amount: number; at: number };
 
 /** Lifecycle of a single job within a generation's job set. */
-export type JobStatus = 'queued' | 'in_progress' | 'completed' | 'failed';
+export const JOB_STATUSES = ['queued', 'in_progress', 'completed', 'failed'] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
 
 /**
  * One child job of a generation. A single generate click is one charge holding
@@ -69,4 +70,13 @@ export type GenerationEvent = {
 /** Type guard for untrusted values coming off the wire / captured traffic. */
 export function isTool(value: unknown): value is Tool {
   return typeof value === 'string' && (TOOLS as readonly string[]).includes(value);
+}
+
+/**
+ * Type guard for a job status observed in captured traffic. A status string we
+ * don't recognise is never coerced — the caller flags it instead of guessing
+ * (ADR-0002; unknown-status flag is issue #8).
+ */
+export function isJobStatus(value: unknown): value is JobStatus {
+  return typeof value === 'string' && (JOB_STATUSES as readonly string[]).includes(value);
 }

@@ -1,22 +1,34 @@
-import type { CapturedResponse, ExtractedUsage, ToolAdapter } from './types';
+import type {
+  CapturedResponse,
+  ExtractedGeneration,
+  ExtractedStatus,
+  ExtractedUsage,
+  JobStatusUpdate,
+  ToolAdapter,
+} from './types';
 
 /**
- * Higgsfield (AI image/video) adapter.
+ * Higgsfield (AI image/video) adapter. Recognises two kinds of response:
  *
- * Recognises the **generate** response — `POST /fnf/jobs/{type}` and
- * `POST /fnf/jobs/v2/{type}` — and pulls the billed Cost, the job-set id
- * (`toolRef`), the prompt, and the child job ids out of it. Everything else on
- * that host (`/fnf/user`, `/fnf/tours`, `GET /fnf/jobs/{id}` status polls,
- * `POST /fnf/jobs/status-batch`, …) is not a new generation and yields `null`.
+ * - the **generate** response — `POST /fnf/jobs/{type}` and
+ *   `POST /fnf/jobs/v2/{type}` — pulling the billed Cost, the job-set id
+ *   (`toolRef`), the prompt, and the child job ids (a new generation); and
+ * - the tool's own **status polls** — `GET /fnf/jobs/{id}` and
+ *   `POST /fnf/jobs/status-batch` — producing passive Job outcome updates
+ *   (status + `results.raw.url` media on completion). The extension issues no
+ *   Higgsfield requests of its own; it only reads the tool's polling traffic
+ *   (passive observation, ADR-0001).
  *
- * Recognition is deterministic — a URL-shape check plus the `job_sets` response
- * shape — never a guess (ADR-0002). Attribution is not the adapter's job; it
- * fills in only what the tool exposes and leaves user/brand/asset to the caller.
+ * Everything else on that host (`/fnf/user`, `/fnf/tours`, …) yields `null`.
+ * Recognition is deterministic — a URL-shape check plus the response body shape
+ * — never a guess (ADR-0002). Attribution and correlation are not the adapter's
+ * job; it fills in only what the tool exposes and leaves user/brand/asset and
+ * the event-to-update correlation to the caller.
  */
 export const higgsfieldAdapter: ToolAdapter = {
   tool: 'higgsfield',
   matches: (url) => url.includes('higgsfield.ai'),
-  extract: (res) => extractGeneration(res),
+  extract: (res): ExtractedUsage | null => extractGeneration(res) ?? extractStatus(res),
 };
 
 /**
@@ -37,7 +49,7 @@ function isGenerateRequest(res: CapturedResponse): boolean {
   return !NON_GENERATE_SEGMENTS.has(segment);
 }
 
-function extractGeneration(res: CapturedResponse): ExtractedUsage | null {
+function extractGeneration(res: CapturedResponse): ExtractedGeneration | null {
   if (!isGenerateRequest(res)) return null;
 
   const body = res.body;
@@ -57,11 +69,78 @@ function extractGeneration(res: CapturedResponse): ExtractedUsage | null {
   if (cost === undefined) return null;
 
   return {
+    kind: 'generation',
     cost,
     toolRef,
     prompt: readPrompt(jobSet.params),
     jobIds: readJobIds(jobSet.jobs),
   };
+}
+
+/** A single status poll is `GET /fnf/jobs/{id}` (one id segment, no `v2/`). */
+function isSingleStatusPoll(res: CapturedResponse): boolean {
+  if (res.method.toUpperCase() !== 'GET') return false;
+  const path = pathnameOf(res.url);
+  if (path === null) return false;
+  return /^\/fnf\/jobs\/[^/]+\/?$/.test(path);
+}
+
+/** The batch status poll is `POST /fnf/jobs/status-batch`. */
+function isStatusBatch(res: CapturedResponse): boolean {
+  if (res.method.toUpperCase() !== 'POST') return false;
+  return pathnameOf(res.url) === '/fnf/jobs/status-batch';
+}
+
+/**
+ * Recognise the tool's own status polls and turn them into passive Job outcome
+ * updates. A single poll (`GET /fnf/jobs/{id}`) carries one job object; the
+ * batch (`POST /fnf/jobs/status-batch`) carries an array of the same shape.
+ *
+ * The batch response shape is inferred from the single-job shape — no batch
+ * response has been captured yet (spec "Further Notes") — so both paths share
+ * one job-object reader. Returns `null` when nothing job-shaped is present, so a
+ * same-URL non-job body (an error, `/fnf/jobs/accessible`) is not a status
+ * update.
+ */
+function extractStatus(res: CapturedResponse): ExtractedStatus | null {
+  let jobObjects: unknown[];
+  if (isSingleStatusPoll(res)) {
+    jobObjects = [res.body];
+  } else if (isStatusBatch(res)) {
+    jobObjects = Array.isArray(res.body) ? res.body : [];
+  } else {
+    return null;
+  }
+
+  const updates: JobStatusUpdate[] = [];
+  for (const obj of jobObjects) {
+    const update = readJobUpdate(obj);
+    if (update !== null) updates.push(update);
+  }
+  return updates.length > 0 ? { kind: 'status', updates } : null;
+}
+
+/**
+ * Read one job object (`{ id, status, results? }`) into an outcome update. The
+ * status string is passed through verbatim — mapping known values to a
+ * `JobStatus` and flagging the rest is the caller's job (ADR-0002, issue #8).
+ */
+function readJobUpdate(obj: unknown): JobStatusUpdate | null {
+  if (!isRecord(obj)) return null;
+  const jobId = obj.id;
+  if (typeof jobId !== 'string') return null;
+  const status = obj.status;
+  if (typeof status !== 'string') return null;
+  const mediaUrl = readMediaUrl(obj.results);
+  return mediaUrl === undefined ? { jobId, status } : { jobId, status, mediaUrl };
+}
+
+/** Result media lives at `results.raw.url` once a job completes. */
+function readMediaUrl(results: unknown): string | undefined {
+  if (!isRecord(results)) return undefined;
+  const raw = results.raw;
+  if (!isRecord(raw)) return undefined;
+  return typeof raw.url === 'string' ? raw.url : undefined;
 }
 
 /**

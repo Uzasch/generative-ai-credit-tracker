@@ -1,0 +1,20 @@
+{
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/status-batch",
+  "method": "POST",
+  "status": 200,
+  "body": [
+    {
+      "id": "b3473756-0857-4b76-b3e1-555e4da41614",
+      "status": "completed",
+      "results": {
+        "raw": {
+          "url": "https://cdn.higgsfield.ai/generated/b3473756-0857-4b76-b3e1-555e4da41614/raw.mp4"
+        }
+      }
+    },
+    {
+      "id": "5488b706-cf6f-4799-9b57-da998578bc9b",
+      "status": "in_progress"
+    }
+  ]
+}

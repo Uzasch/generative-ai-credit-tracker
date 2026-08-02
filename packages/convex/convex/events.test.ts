@@ -108,3 +108,125 @@ test('roll-ups are isolated per organization', async () => {
   expect(mine.net).toBe(100); // the other org's 999 is not visible
   expect(asset.net).toBe(100);
 });
+
+// --- applyJobStatus: passive outcome correlation (issue #4) --------------------
+// A status poll observed by the extension carries only a job id + status (+ media
+// on completion). The mutation correlates it back to the event that owns that
+// job and patches the matching JobOutcome in `jobs[]`, leaving siblings alone.
+
+/** Read back the single event we recorded for `asset_1`, with its current jobs. */
+async function jobsOf(
+  t: ReturnType<typeof convexTest>,
+  assetId = 'asset_1',
+): Promise<Array<{ jobId: string; status: string; mediaUrl?: string }>> {
+  const usage = await t.query(api.events.usageByAsset, { organizationId: ORG, assetId });
+  const event = usage.events[0];
+  if (event === undefined) throw new Error(`no event recorded for asset ${assetId}`);
+  return event.jobs;
+}
+
+test('a job transitions queued -> in_progress -> completed and gains its media url', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(
+    api.events.record,
+    eventArgs({ toolRef: 'set_1', jobs: [{ jobId: 'job_1', status: 'queued' }] }),
+  );
+
+  await t.mutation(api.events.applyJobStatus, { jobId: 'job_1', status: 'in_progress' });
+  expect((await jobsOf(t))[0]).toEqual({ jobId: 'job_1', status: 'in_progress' });
+
+  await t.mutation(api.events.applyJobStatus, {
+    jobId: 'job_1',
+    status: 'completed',
+    mediaUrl: 'https://cdn.higgsfield.ai/job_1.png',
+  });
+  expect((await jobsOf(t))[0]).toEqual({
+    jobId: 'job_1',
+    status: 'completed',
+    mediaUrl: 'https://cdn.higgsfield.ai/job_1.png',
+  });
+});
+
+test('applyJobStatus patches only the matching job, leaving batch siblings untouched', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(
+    api.events.record,
+    eventArgs({
+      jobs: [
+        { jobId: 'job_a', status: 'queued' },
+        { jobId: 'job_b', status: 'queued' },
+      ],
+    }),
+  );
+
+  await t.mutation(api.events.applyJobStatus, {
+    jobId: 'job_b',
+    status: 'completed',
+    mediaUrl: 'https://cdn.higgsfield.ai/job_b.mp4',
+  });
+
+  const jobs = await jobsOf(t);
+  expect(jobs).toContainEqual({ jobId: 'job_a', status: 'queued' });
+  expect(jobs).toContainEqual({
+    jobId: 'job_b',
+    status: 'completed',
+    mediaUrl: 'https://cdn.higgsfield.ai/job_b.mp4',
+  });
+});
+
+test('applyJobStatus does not regress a completed job when a stale poll arrives', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(
+    api.events.record,
+    eventArgs({
+      jobs: [{ jobId: 'job_1', status: 'completed', mediaUrl: 'https://cdn/final.png' }],
+    }),
+  );
+
+  // A late in_progress poll (out-of-order delivery) must not undo completion.
+  const changed = await t.mutation(api.events.applyJobStatus, {
+    jobId: 'job_1',
+    status: 'in_progress',
+  });
+  expect(changed).toBeNull();
+  expect((await jobsOf(t))[0]).toEqual({
+    jobId: 'job_1',
+    status: 'completed',
+    mediaUrl: 'https://cdn/final.png',
+  });
+});
+
+test('applyJobStatus attaches media to a job already completed without it', async () => {
+  const t = convexTest(schema, modules);
+  // A completed poll can arrive before its media (e.g. a status-batch completed
+  // entry whose `results` were absent). A later poll carrying the URL must still
+  // attach it even though the job is already terminal.
+  await t.mutation(
+    api.events.record,
+    eventArgs({ jobs: [{ jobId: 'job_1', status: 'completed' }] }),
+  );
+
+  const changed = await t.mutation(api.events.applyJobStatus, {
+    jobId: 'job_1',
+    status: 'completed',
+    mediaUrl: 'https://cdn.higgsfield.ai/late.png',
+  });
+  expect(changed).not.toBeNull();
+  expect((await jobsOf(t))[0]).toEqual({
+    jobId: 'job_1',
+    status: 'completed',
+    mediaUrl: 'https://cdn.higgsfield.ai/late.png',
+  });
+});
+
+test('applyJobStatus is a no-op for a job id it has never seen', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(api.events.record, eventArgs({ jobs: [{ jobId: 'job_1', status: 'queued' }] }));
+
+  const changed = await t.mutation(api.events.applyJobStatus, {
+    jobId: 'job_unknown',
+    status: 'completed',
+  });
+  expect(changed).toBeNull();
+  expect((await jobsOf(t))[0]).toEqual({ jobId: 'job_1', status: 'queued' });
+});

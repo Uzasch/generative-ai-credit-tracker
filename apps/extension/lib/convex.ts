@@ -1,4 +1,4 @@
-import type { GenerationEvent, JobOutcome, RefundState } from '@token-tracker/shared';
+import type { GenerationEvent, JobOutcome, JobStatus, RefundState } from '@token-tracker/shared';
 import { ConvexHttpClient } from 'convex/browser';
 import { type FunctionReference, makeFunctionReference } from 'convex/server';
 import type { RawCapture } from './tools';
@@ -33,6 +33,17 @@ const recordEvent = makeFunctionReference<'mutation'>('events:record') as Functi
   string
 >;
 
+/** Arguments for the `events.applyJobStatus` mutation (passive outcome update). */
+export type JobStatusUpdateInput = {
+  jobId: string;
+  status: JobStatus;
+  mediaUrl?: string;
+};
+
+const applyJobStatus = makeFunctionReference<'mutation'>(
+  'events:applyJobStatus',
+) as FunctionReference<'mutation', 'public', JobStatusUpdateInput, string | null>;
+
 let client: ConvexHttpClient | null = null;
 function getClient(): ConvexHttpClient | null {
   if (!CONVEX_URL) return null;
@@ -65,5 +76,22 @@ export async function recordGenerationEvent(event: GenerationEventInput): Promis
     await c.mutation(recordEvent, event);
   } catch (err) {
     console.warn('[token-tracker] failed to record generation event', err);
+  }
+}
+
+/**
+ * Apply one passively-observed job status update to its originating event.
+ * Best-effort — never throws to the caller. Convex correlates by job id.
+ */
+export async function recordJobStatus(update: JobStatusUpdateInput): Promise<void> {
+  const c = getClient();
+  if (!c) {
+    console.warn('[token-tracker] VITE_CONVEX_URL not set — job status update dropped');
+    return;
+  }
+  try {
+    await c.mutation(applyJobStatus, update);
+  } catch (err) {
+    console.warn('[token-tracker] failed to apply job status update', err);
   }
 }
