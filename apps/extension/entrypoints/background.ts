@@ -63,6 +63,9 @@ export default defineBackground(() => {
       for (const update of result.usage.updates) {
         if (!isJobStatus(update.status)) continue;
         void recordJobStatus({
+          // Scope correlation to the same tenant the event was recorded under
+          // (ADR-0004). Real attribution swaps this in alongside the record path.
+          organizationId: STUB_ATTRIBUTION.organizationId,
           jobId: update.jobId,
           status: update.status,
           mediaUrl: update.mediaUrl,

@@ -45,11 +45,20 @@ test('demo: a recorded generation reaches completed with its media via passive p
 
   // 2. The tool's own `GET /fnf/jobs/{id}` polls are observed passively and
   //    applied — the job advances queued -> in_progress -> completed.
-  await t.mutation(api.events.applyJobStatus, { jobId, status: 'in_progress' });
+  await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
+    jobId,
+    status: 'in_progress',
+  });
   expect((await jobOf()).status).toBe('in_progress');
 
   const mediaUrl = 'https://cdn.higgsfield.ai/generated/0b836048/raw.png';
-  await t.mutation(api.events.applyJobStatus, { jobId, status: 'completed', mediaUrl });
+  await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
+    jobId,
+    status: 'completed',
+    mediaUrl,
+  });
 
   // 3. The job is completed and carries its result media link.
   const finished = await jobOf();

@@ -35,6 +35,8 @@ const recordEvent = makeFunctionReference<'mutation'>('events:record') as Functi
 
 /** Arguments for the `events.applyJobStatus` mutation (passive outcome update). */
 export type JobStatusUpdateInput = {
+  /** Tenant that owns the event — correlation is scoped to it (ADR-0004). */
+  organizationId: string;
   jobId: string;
   status: JobStatus;
   mediaUrl?: string;

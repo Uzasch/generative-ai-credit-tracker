@@ -93,15 +93,27 @@ export const markRefunded = mutation({
  * poll); it is never cleared by a status-only poll. Returns the patched event
  * id, or `null` when no job matched or the poll changed nothing.
  *
- * Correlation is a full scan of `events`: a job id cannot be indexed as an array
- * element in Convex, and the spec's "do not denormalize prematurely" (AGENTS.md
- * §6) rules out a jobId→event side table in Phase 1. If poll volume makes this
- * costly, that side table is the documented follow-up.
+ * Correlation is scoped to one Organization (AGENTS.md §6 — every query filters
+ * by `organizationId`; ADR-0004 strict single-org isolation) and then scans that
+ * org's events for the one whose `jobs[]` contains `jobId`: a job id cannot be
+ * indexed as an array element in Convex, and the spec's "do not denormalize
+ * prematurely" (AGENTS.md §6) rules out a jobId→event side table in Phase 1. The
+ * background supplies the org from the same attribution context it recorded the
+ * event with. If per-org poll volume makes the scan costly, that side table is
+ * the documented follow-up.
  */
 export const applyJobStatus = mutation({
-  args: { jobId: v.string(), status: jobStatus, mediaUrl: v.optional(v.string()) },
-  handler: async (ctx, { jobId, status, mediaUrl }) => {
-    for await (const event of ctx.db.query('events')) {
+  args: {
+    organizationId: v.string(),
+    jobId: v.string(),
+    status: jobStatus,
+    mediaUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, { organizationId, jobId, status, mediaUrl }) => {
+    const events = ctx.db
+      .query('events')
+      .withIndex('by_org', (q) => q.eq('organizationId', organizationId));
+    for await (const event of events) {
       const current = event.jobs.find((job) => job.jobId === jobId);
       if (current === undefined) continue;
 

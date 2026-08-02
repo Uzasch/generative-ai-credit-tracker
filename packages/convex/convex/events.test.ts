@@ -132,10 +132,15 @@ test('a job transitions queued -> in_progress -> completed and gains its media u
     eventArgs({ toolRef: 'set_1', jobs: [{ jobId: 'job_1', status: 'queued' }] }),
   );
 
-  await t.mutation(api.events.applyJobStatus, { jobId: 'job_1', status: 'in_progress' });
+  await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
+    jobId: 'job_1',
+    status: 'in_progress',
+  });
   expect((await jobsOf(t))[0]).toEqual({ jobId: 'job_1', status: 'in_progress' });
 
   await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
     jobId: 'job_1',
     status: 'completed',
     mediaUrl: 'https://cdn.higgsfield.ai/job_1.png',
@@ -160,6 +165,7 @@ test('applyJobStatus patches only the matching job, leaving batch siblings untou
   );
 
   await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
     jobId: 'job_b',
     status: 'completed',
     mediaUrl: 'https://cdn.higgsfield.ai/job_b.mp4',
@@ -185,6 +191,7 @@ test('applyJobStatus does not regress a completed job when a stale poll arrives'
 
   // A late in_progress poll (out-of-order delivery) must not undo completion.
   const changed = await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
     jobId: 'job_1',
     status: 'in_progress',
   });
@@ -207,6 +214,7 @@ test('applyJobStatus attaches media to a job already completed without it', asyn
   );
 
   const changed = await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
     jobId: 'job_1',
     status: 'completed',
     mediaUrl: 'https://cdn.higgsfield.ai/late.png',
@@ -224,9 +232,34 @@ test('applyJobStatus is a no-op for a job id it has never seen', async () => {
   await t.mutation(api.events.record, eventArgs({ jobs: [{ jobId: 'job_1', status: 'queued' }] }));
 
   const changed = await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
     jobId: 'job_unknown',
     status: 'completed',
   });
   expect(changed).toBeNull();
   expect((await jobsOf(t))[0]).toEqual({ jobId: 'job_1', status: 'queued' });
+});
+
+test("applyJobStatus is scoped to its organization: another org's poll cannot patch this event", async () => {
+  const t = convexTest(schema, modules);
+  // Same job id lives under our org; a poll arriving for a different org must not
+  // reach across the tenant boundary (AGENTS.md §6, ADR-0004).
+  await t.mutation(api.events.record, eventArgs({ jobs: [{ jobId: 'job_1', status: 'queued' }] }));
+
+  const changed = await t.mutation(api.events.applyJobStatus, {
+    organizationId: 'org_other',
+    jobId: 'job_1',
+    status: 'completed',
+    mediaUrl: 'https://cdn/should-not-apply.png',
+  });
+  expect(changed).toBeNull();
+  expect((await jobsOf(t))[0]).toEqual({ jobId: 'job_1', status: 'queued' });
+
+  // The correct org still correlates and patches it.
+  await t.mutation(api.events.applyJobStatus, {
+    organizationId: ORG,
+    jobId: 'job_1',
+    status: 'in_progress',
+  });
+  expect((await jobsOf(t))[0]).toEqual({ jobId: 'job_1', status: 'in_progress' });
 });
