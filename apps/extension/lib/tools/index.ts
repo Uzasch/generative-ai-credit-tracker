@@ -1,7 +1,7 @@
 import { flowAdapter } from './flow';
 import { higgsfieldAdapter } from './higgsfield';
 import { klingAdapter } from './kling';
-import type { CapturedResponse, ExtractedUsage, ToolAdapter } from './types';
+import type { CapturedResponse, ExtractedUsage, RawCapture, ToolAdapter } from './types';
 
 export const ADAPTERS: readonly ToolAdapter[] = [flowAdapter, higgsfieldAdapter, klingAdapter];
 
@@ -17,4 +17,4 @@ export function extractUsage(
   return null;
 }
 
-export type { CapturedResponse, ExtractedUsage, ToolAdapter };
+export type { CapturedResponse, ExtractedUsage, RawCapture, ToolAdapter };

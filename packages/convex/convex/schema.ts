@@ -24,6 +24,21 @@ const jobOutcome = v.object({
 });
 
 export default defineSchema({
+  /**
+   * Phase-1 discovery probe (ADR-0001): append-only, retained raw traffic from
+   * `fnf-api-gw.higgsfield.ai`. Never modified after insert — refunds and batch
+   * cost are discovered here later, and every derived number stays replayable
+   * (ADR-0003). Headers are never captured, so no auth token lands here.
+   */
+  raw_captures: defineTable({
+    method: v.string(),
+    url: v.string(),
+    requestBody: v.union(v.string(), v.null()),
+    responseBody: v.union(v.string(), v.null()),
+    status: v.number(),
+    capturedAt: v.number(),
+  }).index('by_captured_at', ['capturedAt']),
+
   events: defineTable({
     organizationId: v.string(),
     userId: v.string(),
