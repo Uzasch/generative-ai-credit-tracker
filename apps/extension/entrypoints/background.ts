@@ -5,6 +5,7 @@ import {
   recordGenerationEvent,
   recordJobStatus,
 } from '@/lib/convex';
+import { DisplayedCostCorrelator } from '@/lib/displayedCost';
 import {
   type GenerateClickPayload,
   type RequestStartedPayload,
@@ -22,9 +23,11 @@ import {
 import { ClickRequestCorrelator, toolFromHost } from '@/lib/tripwire';
 import {
   type ExtractedGeneration,
+  type Tool,
   attribute,
   isFlaggedAnomaly,
   isJobStatus,
+  reconcileDisplayedCost,
 } from '@token-tracker/shared';
 
 /**
@@ -54,6 +57,25 @@ const CLICK_SWEEP_BUFFER_MS = 500;
 const clickCorrelator = new ClickRequestCorrelator(CLICK_WINDOW_MS);
 
 /**
+ * How long after a Generate click the runtime will still pair the button's
+ * displayed cost (#13) with a generate response captured in the same tab. The
+ * generate POST returns its job set promptly (it only enqueues), so the response
+ * lands within a couple of seconds; the same window as the click↔request check
+ * (plus its edge buffer) covers that with margin without buffering stale figures.
+ */
+const DISPLAYED_COST_WINDOW_MS = CLICK_WINDOW_MS + CLICK_SWEEP_BUFFER_MS;
+
+/**
+ * Pairs a Generate button's displayed cost (observed at click, from the tripwire)
+ * with the authoritative cost on its generate response (from the capture path),
+ * per tab. A matched pair is cross-checked against ADR-0005's ÷100 rule; a
+ * divergence becomes a `cost-mismatch` anomaly (#13). Module-level so it spans
+ * messages within one service-worker lifetime; pure logic lives in
+ * `@/lib/displayedCost`.
+ */
+const costCorrelator = new DisplayedCostCorrelator(DISPLAYED_COST_WINDOW_MS);
+
+/**
  * Background: receives raw captures from the bridge and retains them in the
  * append-only `raw_captures` Convex table (Phase-1 discovery, ADR-0001). It then
  * runs the tool adapters over each capture and either records a structured
@@ -62,14 +84,18 @@ const clickCorrelator = new ClickRequestCorrelator(CLICK_WINDOW_MS);
  *
  * It also receives Generate-click reports from the tripwire and correlates them
  * against captured generate requests, raising a `click-no-request` Flagged
- * anomaly for a click with no request in the window (#8, ADR-0002).
+ * anomaly for a click with no request in the window (#8, ADR-0002). Each click
+ * also carries the button's displayed credits (#13), reconciled against the
+ * response cost to raise a `cost-mismatch` anomaly when ADR-0005's ÷100 rule broke.
  */
 export default defineBackground(() => {
   // Only the sender's tab id is needed — to scope click↔request correlation per
   // tab. Typed structurally to that so no browser-types import is required.
   browser.runtime.onMessage.addListener((message: unknown, sender: { tab?: { id?: number } }) => {
     if (isCaptureMessage(message)) {
-      void handleCapture(message.payload);
+      // The sender's tab scopes the displayed-cost cross-check (#13) to the same
+      // tab the Generate click came from, mirroring the click↔request correlation.
+      void handleCapture(message.payload, sender.tab?.id);
       return;
     }
     // Both the request-start signal and the Generate click are correlated per
@@ -116,6 +142,15 @@ function handleRequestStarted(payload: RequestStartedPayload, tabId?: number): v
  * the anomaly to a different tenant (ADR-0004).
  */
 async function handleGenerateClick(payload: GenerateClickPayload, tabId?: number): Promise<void> {
+  // Buffer the button's displayed cost (#13) SYNCHRONOUSLY, before the await below:
+  // a fast generate response's `handleCapture` could otherwise run its ÷100
+  // cross-check (ADR-0005) while this handler is still suspended in
+  // `loadActiveContext`, and miss the cost entirely. It needs no Active context —
+  // the Org for any resulting anomaly comes from the capture side. Absent when the
+  // button exposed no readable figure — then there is simply nothing to pair.
+  if (payload.displayedCost !== undefined) {
+    costCorrelator.onClick(payload.displayedCost.value, payload.clickedAt, tabId);
+  }
   const ctx = await loadActiveContext();
   clickCorrelator.onClick({
     host: payload.host,
@@ -158,7 +193,41 @@ function flushExpiredClicks(): void {
   }
 }
 
-async function handleCapture(capture: RawCapture): Promise<void> {
+/**
+ * Reconcile the credits the Generate button displayed at click time (buffered per
+ * tab in `costCorrelator`) with this generate response's authoritative cost, and
+ * record a `cost-mismatch` anomaly when ADR-0005's ÷100 rule broke (#13). The
+ * response cost is never changed — the button figure is a cross-check only. When
+ * no displayed cost was paired (the button showed no readable figure, or its click
+ * was in another tab), there is nothing to check and nothing is flagged.
+ */
+function crossCheckDisplayedCost(args: {
+  tool: Tool;
+  responseCost: number;
+  toolRef?: string;
+  observedAt: number;
+  tabId?: number;
+  organizationId: string;
+}): void {
+  const displayedCredits = costCorrelator.matchResponse(args.observedAt, args.tabId);
+  if (displayedCredits === null) return;
+  const reconciliation = reconcileDisplayedCost(displayedCredits, args.responseCost);
+  if (reconciliation.kind !== 'mismatch') return;
+  void recordAnomaly({
+    organizationId: args.organizationId,
+    tool: args.tool,
+    toolRef: args.toolRef,
+    observedAt: args.observedAt,
+    evidence: {
+      kind: 'cost-mismatch',
+      displayedCost: reconciliation.displayedCost,
+      responseCost: reconciliation.responseCost,
+      expectedCost: reconciliation.expectedCost,
+    },
+  });
+}
+
+async function handleCapture(capture: RawCapture, tabId?: number): Promise<void> {
   // Re-enforce host scope at the trust boundary: the MAIN world is shared with
   // the page, so a page script could post a well-formed message for any URL.
   // Only fnf-api-gw traffic is ever retained (ADR-0001, criterion 1).
@@ -230,6 +299,20 @@ async function handleCapture(capture: RawCapture): Promise<void> {
     }
     return;
   }
+
+  // Displayed-cost cross-check (#13, ADR-0005 guardrail): pair this response's
+  // authoritative cost with the credits the Generate button showed at click time
+  // (buffered per tab in `handleGenerateClick`) and flag a `cost-mismatch` if the
+  // ÷100 rule broke for this model. The response cost stays the billed Cost — the
+  // button figure is metadata only and never overwrites `result.usage.cost`.
+  crossCheckDisplayedCost({
+    tool: result.tool,
+    responseCost: result.usage.cost,
+    toolRef: result.usage.toolRef,
+    observedAt: capture.capturedAt,
+    tabId,
+    organizationId: ctx.organizationId,
+  });
 
   // A new generation: attribute it to the Active context and record it. Child
   // jobs start `queued` — their freshly-created state on the generate response;

@@ -112,6 +112,15 @@ export {
   isAnomalyKind,
 } from './anomaly';
 
+// Displayed-cost cross-check (#13): the pure ÷100 reconciliation (ADR-0005) that
+// compares the Generate button's rendered credits against the authoritative
+// response cost and reports a match or a mismatch for a `cost-mismatch` anomaly.
+export {
+  type CostReconciliation,
+  INTERNAL_UNITS_PER_CREDIT,
+  reconcileDisplayedCost,
+} from './costCheck';
+
 // Attribution: the pure step that stamps a tool-extracted generation with the
 // editor's Active context, or flags it when no Active Asset is selected.
 export {
