@@ -7,21 +7,41 @@ const refundState = v.union(
   v.object({ kind: v.literal('refunded'), amount: v.number(), at: v.number() }),
 );
 
+const jobOutcome = v.object({
+  jobId: v.string(),
+  status: v.union(
+    v.literal('queued'),
+    v.literal('in_progress'),
+    v.literal('completed'),
+    v.literal('failed'),
+  ),
+  mediaUrl: v.optional(v.string()),
+});
+
 /** Record a single generation event captured by the extension. */
 export const record = mutation({
   args: {
+    organizationId: v.string(),
     userId: v.string(),
     tool: v.union(v.literal('flow'), v.literal('higgsfield'), v.literal('kling')),
     brandId: v.string(),
     assetId: v.string(),
+    prompt: v.optional(v.string()),
     cost: v.number(),
+    jobs: v.optional(v.array(jobOutcome)),
     refund: v.optional(refundState),
     capturedAt: v.number(),
     toolRef: v.optional(v.string()),
+    toolAccount: v.optional(v.string()),
+    ruleVersion: v.number(),
   },
   handler: async (ctx, args) => {
-    const { refund, ...rest } = args;
-    return await ctx.db.insert('events', { ...rest, refund: refund ?? { kind: 'none' } });
+    const { refund, jobs, ...rest } = args;
+    return await ctx.db.insert('events', {
+      ...rest,
+      jobs: jobs ?? [],
+      refund: refund ?? { kind: 'none' },
+    });
   },
 });
 
