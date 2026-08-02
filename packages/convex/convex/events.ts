@@ -44,13 +44,21 @@ export const record = mutation({
   },
   handler: async (ctx, args) => {
     const { refund, jobs, assignment, ...rest } = args;
+    // The assignment flag mirrors the `'unattributed'` assetId sentinel
+    // (AGENTS.md §6). Derive the expected value here — this is the source of
+    // truth's write boundary — so a contradictory event can never be persisted:
+    // default to the derived value when omitted, and reject a mismatched one.
+    const expected = rest.assetId === 'unattributed' ? 'needs-assignment' : 'assigned';
+    if (assignment && assignment.status !== expected) {
+      throw new Error(
+        `assignment '${assignment.status}' contradicts assetId '${rest.assetId}' (expected '${expected}')`,
+      );
+    }
     return await ctx.db.insert('events', {
       ...rest,
       jobs: jobs ?? [],
       refund: refund ?? { kind: 'none' },
-      // An event with an explicit Active Asset defaults to 'assigned'; the
-      // extension always passes 'needs-assignment' for an unattributed capture.
-      assignment: assignment ?? { status: 'assigned' },
+      assignment: { status: expected },
     });
   },
 });

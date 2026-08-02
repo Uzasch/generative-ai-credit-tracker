@@ -108,3 +108,44 @@ test('roll-ups are isolated per organization', async () => {
   expect(mine.net).toBe(100); // the other org's 999 is not visible
   expect(asset.net).toBe(100);
 });
+
+// The write boundary enforces AGENTS.md §6: the assignment flag mirrors the
+// `'unattributed'` assetId sentinel, so a contradictory event can never persist.
+
+test('an unattributed event is stored needs-assignment even when assignment is omitted', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(api.events.record, eventArgs({ assetId: 'unattributed', brandId: 'brand_x' }));
+
+  // usageByBrand includes unattributed events; usageByAsset refuses the sentinel.
+  const brand = await t.query(api.events.usageByBrand, { organizationId: ORG, brandId: 'brand_x' });
+  expect(brand.events).toHaveLength(1);
+  expect(brand.events[0]?.assignment).toStrictEqual({ status: 'needs-assignment' });
+});
+
+test('a real Asset event is stored assigned', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(api.events.record, eventArgs({ assetId: 'asset_1', brandId: 'brand_x' }));
+
+  const brand = await t.query(api.events.usageByBrand, { organizationId: ORG, brandId: 'brand_x' });
+  expect(brand.events[0]?.assignment).toStrictEqual({ status: 'assigned' });
+});
+
+test('record rejects an assignment that contradicts the assetId', async () => {
+  const t = convexTest(schema, modules);
+
+  // unattributed asset must not pair with 'assigned'
+  await expect(
+    t.mutation(
+      api.events.record,
+      eventArgs({ assetId: 'unattributed', assignment: { status: 'assigned' } }),
+    ),
+  ).rejects.toThrow(/contradicts assetId/);
+
+  // a real Asset must not pair with 'needs-assignment'
+  await expect(
+    t.mutation(
+      api.events.record,
+      eventArgs({ assetId: 'asset_1', assignment: { status: 'needs-assignment' } }),
+    ),
+  ).rejects.toThrow(/contradicts assetId/);
+});
