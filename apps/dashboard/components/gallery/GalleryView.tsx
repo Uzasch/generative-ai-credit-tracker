@@ -1,7 +1,7 @@
 'use client';
 
 import type { GenerationView } from '@/lib/convex';
-import { toCredits } from '@/lib/credits';
+import { netCost, toCredits } from '@/lib/credits';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -30,9 +30,14 @@ import type { GalleryAsset, GalleryData } from './types';
  * (AGENTS.md §7): no fetch logic here.
  */
 
-/** Displayed credits for a set of events (ADR-0005, applied once at the edge). */
+/**
+ * Displayed credits for a set of events (ADR-0005, applied once at the edge).
+ * Aggregates NET usage — charged cost minus any refunded amount (`netCost`) —
+ * never the raw `cost`: refunds net out (AGENTS.md §6), so a refunded generation
+ * must not inflate a tray/ledger total.
+ */
 function creditsOf(events: readonly GenerationView[]): string {
-  return toCredits(events.reduce((sum, e) => sum + e.cost, 0));
+  return toCredits(events.reduce((sum, e) => sum + netCost(e.cost, e.refund), 0));
 }
 
 export function GalleryView(data: GalleryData): JSX.Element {
@@ -128,7 +133,7 @@ export function GalleryView(data: GalleryData): JSX.Element {
       seq: seqRef.current,
       assetName: asset.name,
       brandName: asset.brandName,
-      credits: toCredits(event.cost),
+      credits: toCredits(netCost(event.cost, event.refund)),
     });
     setAnnouncement(
       `Generation stamped and accessioned into ${asset.name} (${asset.brandName}). Ledger updated. ${
@@ -359,7 +364,8 @@ function IntakeObject({
           needs-assignment
         </span>
         <span className="tabular-nums text-manila-dim">
-          {toCredits(event.cost)} credits · {event.media.length}/{event.jobCount} media
+          {toCredits(netCost(event.cost, event.refund))} credits · {event.media.length}/
+          {event.jobCount} media
         </span>
       </span>
     </button>
@@ -457,7 +463,7 @@ function CollectionContents({
               </div>
               <p className="mt-2 line-clamp-2 text-sm text-manila">{event.prompt ?? 'No prompt'}</p>
               <p className="mt-1 text-xs tabular-nums text-manila-dim">
-                {toCredits(event.cost)} credits
+                {toCredits(netCost(event.cost, event.refund))} credits
               </p>
             </li>
           ))}

@@ -15,7 +15,15 @@ import { type FunctionReference, makeFunctionReference } from 'convex/server';
  */
 export type GenerationView = Pick<
   GenerationEvent,
-  'tool' | 'userId' | 'brandId' | 'assetId' | 'assignment' | 'prompt' | 'cost' | 'capturedAt'
+  | 'tool'
+  | 'userId'
+  | 'brandId'
+  | 'assetId'
+  | 'assignment'
+  | 'prompt'
+  | 'cost'
+  | 'refund'
+  | 'capturedAt'
 > & {
   /** Event id — the Assignment target passed back to `assignAsset`. */
   id: string;
@@ -25,10 +33,19 @@ export type GenerationView = Pick<
   jobCount: number;
 };
 
-/** The Organization's intake tray: every unattributed generation awaiting Assignment. */
+/**
+ * One editor's intake tray: their unattributed generations awaiting Assignment.
+ * Scoped by `userId` as well as `organizationId` — the gallery is a single
+ * editor's surface, so the tray mirrors the per-editor feed (ADR-0004).
+ */
 export const unattributedGenerationsRef = makeFunctionReference<'query'>(
   'events:unattributedGenerations',
-) as FunctionReference<'query', 'public', { organizationId: string }, GenerationView[]>;
+) as FunctionReference<
+  'query',
+  'public',
+  { organizationId: string; userId: string },
+  GenerationView[]
+>;
 
 /** One editor's generations within an Organization — the per-Editor feed. */
 export const generationsByUserRef = makeFunctionReference<'query'>(

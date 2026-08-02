@@ -59,6 +59,9 @@ function synthetic(
   hue: number,
   glyph: string,
   jobCount = 1,
+  // Defaults to no refund; pass a `refunded` state to exercise net aggregation
+  // (a refunded generation must net out of the tray/ledger totals).
+  refund: GenerationView['refund'] = { kind: 'none' },
 ): GenerationView {
   return {
     id,
@@ -69,6 +72,7 @@ function synthetic(
     assignment: { status: 'needs-assignment' },
     prompt,
     cost,
+    refund,
     media: [objectThumb(hue, glyph)],
     jobCount,
     capturedAt: 0,
@@ -86,7 +90,13 @@ export const PLACEHOLDER_INTAKE: GenerationView[] = [
     '●',
     4,
   ),
-  synthetic('ph_evt_3', 'Synthetic prompt — vermilion stamp on a manila label', 750, 8, '■'),
+  // A fully-refunded generation (e.g. an nsfw terminal): its 750 cost nets to 0,
+  // so it must not inflate the intake-tray credit total (refunds net out).
+  synthetic('ph_evt_3', 'Synthetic prompt — vermilion stamp on a manila label', 750, 8, '■', 1, {
+    kind: 'refunded',
+    amount: 750,
+    at: 0,
+  }),
   synthetic('ph_evt_4', 'Synthetic prompt — brass fitting under a loupe', 100, 200, '◆'),
   synthetic('ph_evt_5', 'Synthetic prompt — intake tray, overhead study', 500, 120, '✦', 2),
 ];
@@ -102,6 +112,7 @@ export const PLACEHOLDER_FEED: GenerationView[] = [
     assignment: { status: 'assigned' },
     prompt: 'Synthetic prompt — filed study, catalogued last session',
     cost: 500,
+    refund: { kind: 'none' },
     media: [objectThumb(30, '❖')],
     jobCount: 1,
     capturedAt: 0,

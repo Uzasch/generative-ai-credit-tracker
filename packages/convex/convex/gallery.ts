@@ -1,4 +1,4 @@
-import type { AssignmentState, JobOutcome, Tool } from '@token-tracker/shared';
+import type { AssignmentState, JobOutcome, RefundState, Tool } from '@token-tracker/shared';
 
 /**
  * Pure view projection for the Generation Gallery (issue #7). Kept side-effect
@@ -26,6 +26,7 @@ export type GalleryEventInput = {
   assignment: AssignmentState;
   prompt?: string;
   cost: number;
+  refund: RefundState;
   jobs: readonly JobOutcome[];
   capturedAt: number;
 };
@@ -47,6 +48,13 @@ export type GenerationView = {
   prompt?: string;
   /** Internal cost unit as captured; displayed credits are `cost / 100` (ADR-0005). */
   cost: number;
+  /**
+   * Refund state of this generation. Carried so the gallery can aggregate NET
+   * usage (charged `cost` minus any refunded amount) — refunds net out, they
+   * never delete history (AGENTS.md §6). Summing raw `cost` would overstate a
+   * tray/ledger total once a generation is refunded.
+   */
+  refund: RefundState;
   /** Result media URLs — one per completed job that has produced its output. */
   media: string[];
   /** Total jobs in the set, so the UI can show "N of M rendered". */
@@ -81,6 +89,7 @@ export function toGenerationView(event: GalleryEventInput): GenerationView {
     assignment: event.assignment,
     prompt: event.prompt,
     cost: event.cost,
+    refund: event.refund,
     media: resultMedia(event.jobs),
     jobCount: event.jobs.length,
     capturedAt: event.capturedAt,

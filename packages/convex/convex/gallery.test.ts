@@ -47,6 +47,7 @@ const baseEvent: GalleryEventInput = {
   assignment: { status: 'assigned' },
   prompt: 'a raking-light still life',
   cost: 100,
+  refund: { kind: 'none' },
   jobs: [{ jobId: 'j1', status: 'completed', mediaUrl: 'https://cdn/j1.png' }],
   capturedAt: 5,
 };
@@ -61,10 +62,23 @@ test('toGenerationView projects prompt, Cost, and Result media onto the view', (
     assignment: { status: 'assigned' },
     prompt: 'a raking-light still life',
     cost: 100,
+    refund: { kind: 'none' },
     media: ['https://cdn/j1.png'],
     jobCount: 1,
     capturedAt: 5,
   });
+});
+
+test('toGenerationView carries the refund state through so the gallery can net it out', () => {
+  // Refunds net out of usage (AGENTS.md §6); the projection must surface the
+  // refund so a tray/ledger total can subtract it rather than sum the raw cost.
+  const view = toGenerationView({
+    ...baseEvent,
+    cost: 750,
+    refund: { kind: 'refunded', amount: 750, at: 9 },
+  });
+  expect(view.cost).toBe(750);
+  expect(view.refund).toEqual({ kind: 'refunded', amount: 750, at: 9 });
 });
 
 test('toGenerationView carries the unattributed sentinel and needs-assignment flag through', () => {

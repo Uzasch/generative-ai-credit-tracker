@@ -41,7 +41,12 @@ export function ConvexGalleryContainer(): JSX.Element {
     );
   }, [org]);
 
-  const intake = useQuery(unattributedGenerationsRef, organizationId ? { organizationId } : 'skip');
+  // Intake is per-editor, same as the feed: scope it by org AND user so an editor
+  // only sees their own unattributed work (ADR-0004).
+  const intake = useQuery(
+    unattributedGenerationsRef,
+    organizationId && userId ? { organizationId, userId } : 'skip',
+  );
   const feed = useQuery(
     generationsByUserRef,
     organizationId && userId ? { organizationId, userId } : 'skip',
