@@ -304,3 +304,120 @@ test("applyJobStatus is scoped to its organization: another org's poll cannot pa
   });
   expect((await jobsOf(t))[0]).toEqual({ jobId: 'job_1', status: 'in_progress' });
 });
+
+// --- assignAsset + gallery views (issue #7) -----------------------------------
+// The gallery lists a generation as prompt + Result media + Cost, and Assignment
+// (assignAsset) moves an unattributed event onto an Asset, clearing its flag.
+
+test('assignAsset files an unattributed event under an Asset and clears its flag', async () => {
+  const t = convexTest(schema, modules);
+  const eventId = await t.mutation(
+    api.events.record,
+    eventArgs({ assetId: 'unattributed', brandId: 'brand_x', cost: 100 }),
+  );
+
+  // Before: it is the org's only intake-tray item, in neither asset total.
+  const trayBefore = await t.query(api.events.unattributedGenerations, { organizationId: ORG });
+  expect(trayBefore).toHaveLength(1);
+  expect(trayBefore[0]?.assignment).toEqual({ status: 'needs-assignment' });
+
+  const returned = await t.mutation(api.events.assignAsset, {
+    organizationId: ORG,
+    eventId,
+    assetId: 'asset_1',
+  });
+  expect(returned).toBe(eventId);
+
+  // After: the intake tray is empty and the event rolls up to its Asset.
+  const trayAfter = await t.query(api.events.unattributedGenerations, { organizationId: ORG });
+  expect(trayAfter).toHaveLength(0);
+  const asset = await t.query(api.events.usageByAsset, { organizationId: ORG, assetId: 'asset_1' });
+  expect(asset.net).toBe(100);
+  expect(asset.events[0]?.assignment).toEqual({ status: 'assigned' });
+});
+
+test('assignAsset refuses the unattributed sentinel as a target', async () => {
+  const t = convexTest(schema, modules);
+  const eventId = await t.mutation(api.events.record, eventArgs({ assetId: 'unattributed' }));
+  await expect(
+    t.mutation(api.events.assignAsset, { organizationId: ORG, eventId, assetId: 'unattributed' }),
+  ).rejects.toThrow(/not an Asset/);
+});
+
+test('assignAsset is org-scoped: another org cannot file this event', async () => {
+  const t = convexTest(schema, modules);
+  const eventId = await t.mutation(api.events.record, eventArgs({ assetId: 'unattributed' }));
+  await expect(
+    t.mutation(api.events.assignAsset, {
+      organizationId: 'org_other',
+      eventId,
+      assetId: 'asset_1',
+    }),
+  ).rejects.toThrow(/not found in this Organization/);
+});
+
+test('assignAsset is idempotent when re-filing under the same Asset', async () => {
+  const t = convexTest(schema, modules);
+  const eventId = await t.mutation(api.events.record, eventArgs({ assetId: 'unattributed' }));
+  await t.mutation(api.events.assignAsset, { organizationId: ORG, eventId, assetId: 'asset_1' });
+  // A double-submit in batch triage must not error.
+  const again = await t.mutation(api.events.assignAsset, {
+    organizationId: ORG,
+    eventId,
+    assetId: 'asset_1',
+  });
+  expect(again).toBe(eventId);
+});
+
+test('assignAsset refuses to re-attribute an assigned event to a different Asset', async () => {
+  const t = convexTest(schema, modules);
+  const eventId = await t.mutation(api.events.record, eventArgs({ assetId: 'unattributed' }));
+  await t.mutation(api.events.assignAsset, { organizationId: ORG, eventId, assetId: 'asset_1' });
+  await expect(
+    t.mutation(api.events.assignAsset, { organizationId: ORG, eventId, assetId: 'asset_2' }),
+  ).rejects.toThrow(/out of scope/);
+});
+
+test('generationsByUser returns the editor feed as prompt + Result media + Cost', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(
+    api.events.record,
+    eventArgs({
+      userId: 'user_a',
+      prompt: 'a raking-light still life',
+      cost: 100,
+      jobs: [{ jobId: 'j1', status: 'completed', mediaUrl: 'https://cdn/j1.png' }],
+    }),
+  );
+  // Another editor's work must not appear in this feed.
+  await t.mutation(api.events.record, eventArgs({ userId: 'user_b', cost: 999 }));
+
+  const feed = await t.query(api.events.generationsByUser, {
+    organizationId: ORG,
+    userId: 'user_a',
+  });
+  expect(feed).toHaveLength(1);
+  expect(feed[0]).toMatchObject({
+    prompt: 'a raking-light still life',
+    cost: 100,
+    media: ['https://cdn/j1.png'],
+    jobCount: 1,
+  });
+});
+
+test('generationsByAsset lists an Asset feed and refuses the unattributed sentinel', async () => {
+  const t = convexTest(schema, modules);
+  await t.mutation(api.events.record, eventArgs({ assetId: 'asset_1', cost: 500 }));
+  await t.mutation(api.events.record, eventArgs({ assetId: 'unattributed', cost: 100 }));
+
+  const feed = await t.query(api.events.generationsByAsset, {
+    organizationId: ORG,
+    assetId: 'asset_1',
+  });
+  expect(feed).toHaveLength(1);
+  expect(feed[0]?.cost).toBe(500);
+
+  await expect(
+    t.query(api.events.generationsByAsset, { organizationId: ORG, assetId: 'unattributed' }),
+  ).rejects.toThrow(/not an Asset/);
+});

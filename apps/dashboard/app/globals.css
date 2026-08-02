@@ -1,3 +1,38 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  /* Keycap hint for the gallery's keyboard-first triage legend. */
+  .kbd {
+    @apply inline-flex min-w-[1.4rem] items-center justify-center rounded border border-graphite-line bg-graphite px-1 text-[0.7rem] font-medium text-manila-dim;
+  }
+
+  /* The accession stamp: a vermilion inked number posted on each filing. It inks
+     in on mount; under reduced motion it appears statically (brief §3, §6). */
+  .stamp-mark {
+    @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-vermilion font-semibold tabular-nums text-vermilion-ink;
+    animation: stamp-ink 260ms ease-out;
+  }
+}
+
+@keyframes stamp-ink {
+  0% {
+    transform: scale(1.6) rotate(-8deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.94) rotate(-8deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-6deg);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp-mark {
+    animation: none;
+  }
+}

@@ -1,0 +1,88 @@
+import type { AssignmentState, JobOutcome, Tool } from '@token-tracker/shared';
+
+/**
+ * Pure view projection for the Generation Gallery (issue #7). Kept side-effect
+ * free and free of any `_generated` runtime import — like `rollups.ts` — so it is
+ * unit-testable directly (AGENTS.md §9) and reused by every gallery query in
+ * `events.ts`.
+ *
+ * The gallery shows a Generation event as prompt + Result media + Cost
+ * (CONTEXT.md). It never re-declares the event shape (AGENTS.md §6): this is a
+ * read-only projection of the canonical `GenerationEvent`, deriving its fields
+ * from `@token-tracker/shared`.
+ */
+
+/**
+ * The event fields the gallery projection reads. A `Doc<'events'>` is structurally
+ * assignable to this, so the queries pass their documents straight in without a
+ * `_generated` type dependency leaking into this pure module.
+ */
+export type GalleryEventInput = {
+  _id: string;
+  tool: Tool;
+  userId: string;
+  brandId: string;
+  assetId: string;
+  assignment: AssignmentState;
+  prompt?: string;
+  cost: number;
+  jobs: readonly JobOutcome[];
+  capturedAt: number;
+};
+
+/**
+ * One generation as the gallery renders it: its Assignment target id, attribution
+ * axes, prompt, Cost, and the Result media of its completed jobs. `assetId` is the
+ * real Asset once assigned, or the `'unattributed'` sentinel while it awaits
+ * Assignment (mirrored by `assignment.status`).
+ */
+export type GenerationView = {
+  /** Event id — the target an `assignAsset` triage passes back. */
+  id: string;
+  tool: Tool;
+  userId: string;
+  brandId: string;
+  assetId: string;
+  assignment: AssignmentState;
+  prompt?: string;
+  /** Internal cost unit as captured; displayed credits are `cost / 100` (ADR-0005). */
+  cost: number;
+  /** Result media URLs — one per completed job that has produced its output. */
+  media: string[];
+  /** Total jobs in the set, so the UI can show "N of M rendered". */
+  jobCount: number;
+  capturedAt: number;
+};
+
+/**
+ * Result media (CONTEXT.md) for a job set: the output URL each *completed* Job has
+ * produced, in job order. A failed/`nsfw` job yields none; a job seen `completed`
+ * before its `results.raw.url` arrived (issue #4) contributes nothing until a
+ * later poll attaches the URL.
+ */
+export function resultMedia(jobs: readonly JobOutcome[]): string[] {
+  const urls: string[] = [];
+  for (const job of jobs) {
+    if (job.status === 'completed' && job.mediaUrl !== undefined) {
+      urls.push(job.mediaUrl);
+    }
+  }
+  return urls;
+}
+
+/** Project one stored event into the gallery's read-only view shape. */
+export function toGenerationView(event: GalleryEventInput): GenerationView {
+  return {
+    id: event._id,
+    tool: event.tool,
+    userId: event.userId,
+    brandId: event.brandId,
+    assetId: event.assetId,
+    assignment: event.assignment,
+    prompt: event.prompt,
+    cost: event.cost,
+    media: resultMedia(event.jobs),
+    jobCount: event.jobs.length,
+    capturedAt: event.capturedAt,
+  };
+}

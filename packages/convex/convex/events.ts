@@ -1,6 +1,7 @@
 import type { JobStatus } from '@token-tracker/shared';
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import { toGenerationView } from './gallery';
 import { sumNet } from './rollups';
 
 const refundState = v.union(
@@ -166,6 +167,46 @@ export const applyJobStatus = mutation({
 });
 
 /**
+ * Assignment (CONTEXT.md): attach an Unattributed Generation event to a real
+ * Asset, resolving its `needs-assignment` flag. This is the gallery's triage
+ * action (issue #7) — the editor's "accession stamp".
+ *
+ * Moves `assetId` and `assignment` together so the invariant the `record` write
+ * boundary enforces (ADR-0006) still holds: the two can never disagree in stored
+ * data. The `'unattributed'` sentinel is not an Asset (CONTEXT.md) and is refused
+ * as a target. The write is scoped to one Organization (AGENTS.md §6, ADR-0004):
+ * an event owned by another Organization is never touched. Re-filing an event
+ * under the Asset it already holds is an idempotent no-op (safe for a
+ * double-submit in batch triage); re-attributing an already-assigned event to a
+ * *different* Asset is out of scope.
+ */
+export const assignAsset = mutation({
+  args: {
+    organizationId: v.string(),
+    eventId: v.id('events'),
+    assetId: v.string(),
+  },
+  handler: async (ctx, { organizationId, eventId, assetId }) => {
+    if (assetId === 'unattributed') {
+      throw new Error("cannot assign to the 'unattributed' sentinel; choose a real Asset");
+    }
+    const event = await ctx.db.get(eventId);
+    // Org-scope the lookup rather than trusting the id alone (ADR-0004).
+    if (!event || event.organizationId !== organizationId) {
+      throw new Error('event not found in this Organization');
+    }
+    if (event.assignment.status === 'assigned') {
+      if (event.assetId === assetId) return eventId; // idempotent re-file
+      throw new Error(
+        're-attributing an already-assigned event to a different Asset is out of scope',
+      );
+    }
+    await ctx.db.patch(eventId, { assetId, assignment: { status: 'assigned' } });
+    return eventId;
+  },
+});
+
+/**
  * Net usage (charges minus refunds) for one Asset within an Organization,
  * plus the underlying events so callers can reconcile the total.
  *
@@ -228,5 +269,68 @@ export const usageByUser = query({
       .withIndex('by_org_user', (q) => q.eq('organizationId', organizationId).eq('userId', userId))
       .collect();
     return { organizationId, userId, net: sumNet(events), events };
+  },
+});
+
+// --- Generation Gallery views (issue #7) --------------------------------------
+// Read-only projections (prompt + Result media + Cost) for the dashboard gallery,
+// ordered newest-first. Every view is org-scoped (ADR-0004). The projection
+// itself is the pure `toGenerationView` (see `gallery.ts`).
+
+/** One editor's generations within an Organization — the gallery's per-Editor feed. */
+export const generationsByUser = query({
+  args: { organizationId: v.string(), userId: v.string() },
+  handler: async (ctx, { organizationId, userId }) => {
+    const events = await ctx.db
+      .query('events')
+      .withIndex('by_org_user', (q) => q.eq('organizationId', organizationId).eq('userId', userId))
+      .order('desc')
+      .collect();
+    return events.map(toGenerationView);
+  },
+});
+
+/**
+ * One Asset's generations within an Organization — the gallery's per-Asset browse
+ * view. `'unattributed'` is the sentinel, not an Asset (CONTEXT.md); it is refused
+ * here for the same reason `usageByAsset` refuses it — query the intake tray
+ * (`unattributedGenerations`) for those instead.
+ */
+export const generationsByAsset = query({
+  args: { organizationId: v.string(), assetId: v.string() },
+  handler: async (ctx, { organizationId, assetId }) => {
+    if (assetId === 'unattributed') {
+      throw new Error(
+        "'unattributed' is not an Asset; list its generations via unattributedGenerations instead.",
+      );
+    }
+    const events = await ctx.db
+      .query('events')
+      .withIndex('by_org_asset', (q) =>
+        q.eq('organizationId', organizationId).eq('assetId', assetId),
+      )
+      .order('desc')
+      .collect();
+    return events.map(toGenerationView);
+  },
+});
+
+/**
+ * The Organization's intake tray: every Unattributed Generation event awaiting
+ * Assignment (`assetId === 'unattributed'`, `assignment.status === 'needs-assignment'`),
+ * newest-first. Drives the gallery's keyboard-first triage backlog; `assignAsset`
+ * clears items from it one accession at a time.
+ */
+export const unattributedGenerations = query({
+  args: { organizationId: v.string() },
+  handler: async (ctx, { organizationId }) => {
+    const events = await ctx.db
+      .query('events')
+      .withIndex('by_org_asset', (q) =>
+        q.eq('organizationId', organizationId).eq('assetId', 'unattributed'),
+      )
+      .order('desc')
+      .collect();
+    return events.map(toGenerationView);
   },
 });
