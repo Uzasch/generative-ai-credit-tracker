@@ -1,12 +1,12 @@
 import { loadActiveContext } from '@/lib/activeContext';
-import { appendRawCapture, recordGenerationEvent } from '@/lib/convex';
+import { appendRawCapture, recordGenerationEvent, recordJobStatus } from '@/lib/convex';
 import { isCaptureHostUrl, isCaptureMessage } from '@/lib/messaging';
-import { type CapturedResponse, type ExtractedUsage, extractUsage } from '@/lib/tools';
+import { type CapturedResponse, type RawCapture, extractUsage } from '@/lib/tools';
 import {
   type ExtractedGeneration,
-  type Tool,
   attribute,
   isFlaggedAnomaly,
+  isJobStatus,
 } from '@token-tracker/shared';
 
 /**
@@ -17,60 +17,43 @@ const RULE_VERSION = 1;
 
 /**
  * Background: receives raw captures from the bridge and retains them in the
- * append-only `raw_captures` Convex table (Phase-1 discovery, ADR-0001). It also
- * runs the tool adapters over each capture and records a structured
- * `GenerationEvent` for every recognised generation (attribution stubbed).
+ * append-only `raw_captures` Convex table (Phase-1 discovery, ADR-0001). It then
+ * runs the tool adapters over each capture and either records a structured
+ * `GenerationEvent` (a new generation, attributed via the editor's Active
+ * context) or patches an existing event's job outcome (a passive status poll).
  */
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: unknown) => {
     if (!isCaptureMessage(message)) return;
-    const capture = message.payload;
-
-    // Re-enforce host scope at the trust boundary: the MAIN world is shared with
-    // the page, so a page script could post a well-formed message for any URL.
-    // Only fnf-api-gw traffic is ever retained (ADR-0001, criterion 1).
-    if (!isCaptureHostUrl(capture.url)) return;
-
-    // Retain raw traffic first — this is the deliverable of the capture probe.
-    void appendRawCapture(capture);
-
-    // Best-effort structured extraction over the JSON response, if any.
-    const parsed = parseJson(capture.responseBody);
-    if (parsed === undefined) return;
-    const res: CapturedResponse = {
-      url: capture.url,
-      method: capture.method,
-      status: capture.status,
-      body: parsed,
-    };
-    const result = extractUsage(res);
-    if (!result) return;
-
-    void attributeAndRecord(result.tool, result.usage, capture.capturedAt);
+    void handleCapture(message.payload);
   });
 });
 
-/**
- * Attribute a recognised generation to the editor's Active context and record it.
- *
- * The context (identity + Active Asset) is established by the editor in the popup
- * (ADR-0004). With an Active Asset the event carries it; with none, `attribute`
- * returns an `unattributed` event — still recorded, so a real charge is never
- * lost (spec story 4), with the `'unattributed'` asset the signal the editor
- * later resolves via Assignment (CONTEXT.md).
- *
- * Before the editor has set up any context at all, the verbatim raw capture
- * already retained above is the durable, replayable record of the charge
- * (ADR-0001) — we skip structured recording rather than invent an Organization
- * or User, since every event is scoped to exactly one real Organization
- * (ADR-0004). The popup persists a default context on first open, so this only
- * affects generations captured before the popup is ever opened.
- */
-async function attributeAndRecord(
-  tool: Tool,
-  usage: ExtractedUsage,
-  capturedAt: number,
-): Promise<void> {
+async function handleCapture(capture: RawCapture): Promise<void> {
+  // Re-enforce host scope at the trust boundary: the MAIN world is shared with
+  // the page, so a page script could post a well-formed message for any URL.
+  // Only fnf-api-gw traffic is ever retained (ADR-0001, criterion 1).
+  if (!isCaptureHostUrl(capture.url)) return;
+
+  // Retain raw traffic first — this is the deliverable of the capture probe.
+  void appendRawCapture(capture);
+
+  // Best-effort structured extraction over the JSON response, if any.
+  const parsed = parseJson(capture.responseBody);
+  if (parsed === undefined) return;
+  const res: CapturedResponse = {
+    url: capture.url,
+    method: capture.method,
+    status: capture.status,
+    body: parsed,
+  };
+  const result = extractUsage(res);
+  if (!result) return;
+
+  // Both branches attribute to the editor's Active context (ADR-0004). Without
+  // one, the raw capture retained above is the durable record (ADR-0001) — we
+  // never invent an Organization, so we skip structured recording here. The
+  // popup persists a default context on first open.
   const ctx = await loadActiveContext();
   if (!ctx) {
     console.warn(
@@ -79,17 +62,36 @@ async function attributeAndRecord(
     return;
   }
 
-  // Child jobs are `queued` — their freshly-created state on the generate
-  // response; observed status transitions arrive via status polls later (ADR-0002).
+  if (result.usage.kind === 'status') {
+    // Passive outcome update from the tool's own status polls. Correlate each job
+    // back to its event and patch the matching outcome (Convex matches by job id),
+    // scoped to the same tenant the event was recorded under (ADR-0004). A status
+    // we don't recognise is ignored — never coerced into a JobStatus (ADR-0002);
+    // the unknown-status Flagged anomaly is issue #8.
+    for (const update of result.usage.updates) {
+      if (!isJobStatus(update.status)) continue;
+      void recordJobStatus({
+        organizationId: ctx.organizationId,
+        jobId: update.jobId,
+        status: update.status,
+        mediaUrl: update.mediaUrl,
+      });
+    }
+    return;
+  }
+
+  // A new generation: attribute it to the Active context and record it. Child
+  // jobs start `queued` — their freshly-created state on the generate response;
+  // observed status transitions arrive via the status polls above (ADR-0002).
   const extracted: ExtractedGeneration = {
-    tool,
-    cost: usage.cost,
-    prompt: usage.prompt,
-    jobIds: usage.jobIds,
-    toolRef: usage.toolRef,
-    toolAccount: usage.toolAccount,
-    refund: usage.refund,
-    capturedAt,
+    tool: result.tool,
+    cost: result.usage.cost,
+    prompt: result.usage.prompt,
+    jobIds: result.usage.jobIds,
+    toolRef: result.usage.toolRef,
+    toolAccount: result.usage.toolAccount,
+    refund: result.usage.refund,
+    capturedAt: capture.capturedAt,
     ruleVersion: RULE_VERSION,
   };
 
@@ -97,7 +99,6 @@ async function attributeAndRecord(
   if (isFlaggedAnomaly(outcome)) {
     // A genuine Flagged anomaly is evidence for the Discovery agent, not a
     // billable event; the raw capture retained above is its record (ADR-0001).
-    // #5 wires no anomaly trigger, so attribute() does not produce one yet.
     console.warn(`[token-tracker] flagged anomaly (not recorded): ${outcome.reason}`);
     return;
   }

@@ -1,3 +1,4 @@
+import type { JobStatus } from '@token-tracker/shared';
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { sumNet } from './rollups';
@@ -13,16 +14,30 @@ const assignmentState = v.union(
   v.object({ status: v.literal('needs-assignment') }),
 );
 
+const jobStatus = v.union(
+  v.literal('queued'),
+  v.literal('in_progress'),
+  v.literal('completed'),
+  v.literal('failed'),
+);
+
 const jobOutcome = v.object({
   jobId: v.string(),
-  status: v.union(
-    v.literal('queued'),
-    v.literal('in_progress'),
-    v.literal('completed'),
-    v.literal('failed'),
-  ),
+  status: jobStatus,
   mediaUrl: v.optional(v.string()),
 });
+
+/**
+ * How far a job has progressed, for ordering out-of-order status polls. Passive
+ * polls can arrive late; a job never moves backwards and, once terminal, never
+ * changes again. `completed` and `failed` share the terminal rank.
+ */
+const STATUS_RANK: Record<JobStatus, number> = {
+  queued: 0,
+  in_progress: 1,
+  completed: 2,
+  failed: 2,
+};
 
 /** Record a single generation event captured by the extension. */
 export const record = mutation({
@@ -77,6 +92,71 @@ export const markRefunded = mutation({
     if (!event) return null;
     await ctx.db.patch(event._id, { refund: { kind: 'refunded', amount, at } });
     return event._id;
+  },
+});
+
+/**
+ * Apply a passively-observed job status to the event that owns the job (issue
+ * #4). A status poll carries only the job id, its status, and — on completion —
+ * the result media URL; it has no event, org, or asset context. We correlate by
+ * locating the event whose `jobs[]` contains `jobId` and patch that one
+ * outcome, leaving its siblings untouched.
+ *
+ * Status never moves backwards: out-of-order polls are common, so a poll that
+ * would regress a job is ignored, and once a job is terminal (completed/failed)
+ * its status is frozen — the first terminal outcome wins. Media, however, is
+ * only ever added and can still attach to an already-terminal job (a completed
+ * job first seen without its `results.raw.url` gains the link from a later
+ * poll); it is never cleared by a status-only poll. Returns the patched event
+ * id, or `null` when no job matched or the poll changed nothing.
+ *
+ * Correlation is scoped to one Organization (AGENTS.md §6 — every query filters
+ * by `organizationId`; ADR-0004 strict single-org isolation) and then scans that
+ * org's events for the one whose `jobs[]` contains `jobId`: a job id cannot be
+ * indexed as an array element in Convex, and the spec's "do not denormalize
+ * prematurely" (AGENTS.md §6) rules out a jobId→event side table in Phase 1. The
+ * background supplies the org from the same attribution context it recorded the
+ * event with. If per-org poll volume makes the scan costly, that side table is
+ * the documented follow-up.
+ */
+export const applyJobStatus = mutation({
+  args: {
+    organizationId: v.string(),
+    jobId: v.string(),
+    status: jobStatus,
+    mediaUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, { organizationId, jobId, status, mediaUrl }) => {
+    const events = ctx.db
+      .query('events')
+      .withIndex('by_org', (q) => q.eq('organizationId', organizationId));
+    for await (const event of events) {
+      const current = event.jobs.find((job) => job.jobId === jobId);
+      if (current === undefined) continue;
+
+      // Advance the status only when it moves strictly forward; equal-or-lower
+      // ranks (a stale poll, a second terminal state) leave the status frozen.
+      const nextStatus =
+        STATUS_RANK[status] > STATUS_RANK[current.status] ? status : current.status;
+      // Media is additive: a newly-observed URL wins, otherwise keep what we had.
+      const nextMediaUrl = mediaUrl ?? current.mediaUrl;
+
+      // Nothing to do if neither the status nor the media actually changed.
+      if (nextStatus === current.status && nextMediaUrl === current.mediaUrl) return null;
+
+      const jobs = event.jobs.map((job) =>
+        job.jobId === jobId
+          ? {
+              jobId: job.jobId,
+              status: nextStatus,
+              ...(nextMediaUrl !== undefined ? { mediaUrl: nextMediaUrl } : {}),
+            }
+          : job,
+      );
+      await ctx.db.patch(event._id, { jobs });
+      return event._id;
+    }
+    return null;
   },
 });
 

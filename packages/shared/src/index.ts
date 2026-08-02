@@ -25,7 +25,8 @@ export type RefundState =
 export type AssignmentState = { status: 'assigned' } | { status: 'needs-assignment' };
 
 /** Lifecycle of a single job within a generation's job set. */
-export type JobStatus = 'queued' | 'in_progress' | 'completed' | 'failed';
+export const JOB_STATUSES = ['queued', 'in_progress', 'completed', 'failed'] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
 
 /**
  * One child job of a generation. A single generate click is one charge holding
@@ -97,3 +98,12 @@ export {
 
 // Seed selection catalog for the popup's Org → Brand → Asset picker + login roster.
 export type { SeedAsset, SeedBrand, SeedCatalog, SeedOrg, SeedUser } from './seed';
+
+/**
+ * Type guard for a job status observed in captured traffic. A status string we
+ * don't recognise is never coerced — the caller flags it instead of guessing
+ * (ADR-0002; unknown-status flag is issue #8).
+ */
+export function isJobStatus(value: unknown): value is JobStatus {
+  return typeof value === 'string' && (JOB_STATUSES as readonly string[]).includes(value);
+}

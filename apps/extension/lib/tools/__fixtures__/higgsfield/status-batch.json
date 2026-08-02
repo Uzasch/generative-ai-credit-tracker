@@ -1,0 +1,31 @@
+{
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/status-batch",
+  "method": "POST",
+  "status": 200,
+  "body": {
+    "items": [
+      {
+        "id": "076c2117-8ade-41f8-ab33-395c2e1f7fe5",
+        "status": "in_progress",
+        "ip_check_finished": null,
+        "ip_detected": null,
+        "job_set_type": "nano_banana_2_lite"
+      },
+      {
+        "id": "41f3d26d-8fae-43af-ad8f-ea7382d2e074",
+        "status": "completed",
+        "ip_check_finished": null,
+        "ip_detected": null,
+        "job_set_type": "nano_banana_2_lite"
+      },
+      {
+        "id": "7f9aab41-412a-40f0-a2da-b2708eb594b2",
+        "status": "queued",
+        "ip_check_finished": null,
+        "ip_detected": null,
+        "job_set_type": "nano_banana_2_lite"
+      }
+    ],
+    "missing": []
+  }
+}
