@@ -24,9 +24,24 @@ export type RefundState =
  */
 export type AssignmentState = { status: 'assigned' } | { status: 'needs-assignment' };
 
-/** Lifecycle of a single job within a generation's job set. */
-export const JOB_STATUSES = ['queued', 'in_progress', 'completed', 'failed'] as const;
+/**
+ * Lifecycle of a single job within a generation's job set. `completed` is the
+ * only success terminal; the rest of the terminals are failures (see
+ * `FAILURE_STATUSES`). `nsfw` is a content-safety rejection observed in real
+ * Higgsfield traffic, which the tool fully refunds
+ * (.scratch/higgsfield-tracking/findings/refund-signal-nsfw.md).
+ */
+export const JOB_STATUSES = ['queued', 'in_progress', 'completed', 'failed', 'nsfw'] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
+
+/**
+ * Terminal statuses that mean the job did not succeed. A non-`completed`
+ * terminal ⇒ the tool refunds the job-set cost, and the indicator surfaces it as
+ * a failure. Both refund detection (#17) and the failure indicator (#18) key off
+ * this one list. Add new failure strings here as captures reveal them.
+ */
+export const FAILURE_STATUSES = ['failed', 'nsfw'] as const;
+export type FailureStatus = (typeof FAILURE_STATUSES)[number];
 
 /**
  * One child job of a generation. A single generate click is one charge holding
@@ -106,4 +121,13 @@ export type { SeedAsset, SeedBrand, SeedCatalog, SeedOrg, SeedUser } from './see
  */
 export function isJobStatus(value: unknown): value is JobStatus {
   return typeof value === 'string' && (JOB_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * Type guard for a non-`completed` terminal failure status. Lets refund
+ * detection (#17) and the failure indicator (#18) test a status without
+ * re-declaring the failure set.
+ */
+export function isFailureStatus(value: unknown): value is FailureStatus {
+  return typeof value === 'string' && (FAILURE_STATUSES as readonly string[]).includes(value);
 }

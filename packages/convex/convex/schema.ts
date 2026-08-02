@@ -24,6 +24,9 @@ const jobOutcome = v.object({
     v.literal('in_progress'),
     v.literal('completed'),
     v.literal('failed'),
+    // Content-safety rejection; a non-`completed` terminal failure (mirrors
+    // JOB_STATUSES / FAILURE_STATUSES in @token-tracker/shared).
+    v.literal('nsfw'),
   ),
   mediaUrl: v.optional(v.string()),
 });

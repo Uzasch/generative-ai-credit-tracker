@@ -19,6 +19,9 @@ const jobStatus = v.union(
   v.literal('in_progress'),
   v.literal('completed'),
   v.literal('failed'),
+  // Content-safety rejection; a non-`completed` terminal failure (mirrors
+  // JOB_STATUSES / FAILURE_STATUSES in @token-tracker/shared).
+  v.literal('nsfw'),
 );
 
 const jobOutcome = v.object({
@@ -30,13 +33,15 @@ const jobOutcome = v.object({
 /**
  * How far a job has progressed, for ordering out-of-order status polls. Passive
  * polls can arrive late; a job never moves backwards and, once terminal, never
- * changes again. `completed` and `failed` share the terminal rank.
+ * changes again. Every terminal status — `completed` and the failures
+ * (`failed`, `nsfw`) — shares the terminal rank.
  */
 const STATUS_RANK: Record<JobStatus, number> = {
   queued: 0,
   in_progress: 1,
   completed: 2,
   failed: 2,
+  nsfw: 2,
 };
 
 /** Record a single generation event captured by the extension. */
