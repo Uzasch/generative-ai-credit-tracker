@@ -114,6 +114,14 @@ export {
 // Seed selection catalog for the popup's Org → Brand → Asset picker + login roster.
 export type { SeedAsset, SeedBrand, SeedCatalog, SeedOrg, SeedUser } from './seed';
 
+// Capture-retention rules for the Phase-1 probe's `raw_captures` table (ADR-0007):
+// the noise denylist and identical-consecutive-capture de-dup that bound its growth.
+export {
+  type RawCaptureContent,
+  isDenylistedCaptureUrl,
+  isDuplicateCapture,
+} from './capture';
+
 // Refund detection: the pure step that turns a failure-terminal job status into
 // a `refunded` transition, and the independent wallet-delta cross-check of its
 // amount (issue #17).

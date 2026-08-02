@@ -15,3 +15,11 @@ actually contains.
   data model. That is accepted, not a mistake to avoid.
 - Raw captures are retained (not just parsed) — this is also what makes
   auto-shipped detection rules replayable (see ADR-0003).
+
+## Refined by
+
+- **ADR-0007** narrows "capture all" to bound the table's growth: a noise
+  denylist, status-poll de-dup, and a retention TTL. Breadth is preserved where
+  discovery value lives (all unrecognised endpoints, all `/fnf/jobs*`, recent
+  traffic); only positively-identified noise and informationless poll repeats are
+  dropped. Retained rows are still never patched in place, so replayability holds.
