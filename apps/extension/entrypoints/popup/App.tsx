@@ -1,8 +1,23 @@
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { loadActiveContext, saveActiveContext } from '@/lib/activeContext';
 import { seedCatalogRef } from '@/lib/seed';
 import type { ActiveContext } from '@token-tracker/shared';
 import { useQuery } from 'convex/react';
 import { type ReactNode, useEffect, useState } from 'react';
+
+/**
+ * Radix `Select` forbids an empty-string item value (it reserves `''` for the
+ * cleared/placeholder state), so the Active-Asset picker's "None" choice carries
+ * this sentinel instead. It maps to a `null` `assetId` — the unattributed state.
+ */
+const NO_ASSET_VALUE = '__none__';
 
 /**
  * Popup: the editor's minimal "our login" identity and the Org → Brand → Active
@@ -12,10 +27,9 @@ import { type ReactNode, useEffect, useState } from 'react';
  * Asset; with none selected, generations are recorded `unattributed`.
  *
  * The seed catalog is served read-only by Convex (`seed:catalog`); real Org /
- * Brand / Asset / User CRUD is out of scope for this ticket. The pickers are
- * native labelled controls (accessible by default, AGENTS.md §7); adopting the
- * shadcn `Select`/`Button` components is deferred until that component library
- * is set up in the extension.
+ * Brand / Asset / User CRUD is out of scope for this ticket. The pickers use the
+ * shadcn `Select` and the Clear action the shadcn `Button` (AGENTS.md §7) — both
+ * labelled and keyboard-navigable, over theme tokens (light/dark).
  */
 export function App() {
   const catalog = useQuery(seedCatalogRef);
@@ -124,89 +138,96 @@ export function App() {
         <SelectField
           id="org"
           label="Organization"
-          value={organizationId ?? ''}
-          onChange={selectOrg}
+          value={organizationId ?? undefined}
+          onValueChange={selectOrg}
         >
           {catalog.orgs.map((o) => (
-            <option key={o.organizationId} value={o.organizationId}>
+            <SelectItem key={o.organizationId} value={o.organizationId}>
               {o.name}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
 
         <SelectField
           id="user"
           label="Editor (our login for this Org)"
-          value={userId ?? ''}
-          onChange={(v) => setUserId(v || null)}
+          value={userId ?? undefined}
+          onValueChange={setUserId}
           disabled={!org}
         >
           {org?.users.map((u) => (
-            <option key={u.userId} value={u.userId}>
+            <SelectItem key={u.userId} value={u.userId}>
               {u.displayName}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
 
         <SelectField
           id="brand"
           label="Brand"
-          value={brandId ?? ''}
-          onChange={selectBrand}
+          value={brandId ?? undefined}
+          onValueChange={selectBrand}
           disabled={!org}
         >
           {org?.brands.map((b) => (
-            <option key={b.brandId} value={b.brandId}>
+            <SelectItem key={b.brandId} value={b.brandId}>
               {b.name}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
 
         <SelectField
           id="asset"
           label="Active Asset"
-          value={assetId ?? ''}
-          onChange={(v) => setAssetId(v || null)}
+          // The "None" sentinel stands in for a null assetId (Radix bans '').
+          value={assetId ?? NO_ASSET_VALUE}
+          onValueChange={(v) => setAssetId(v === NO_ASSET_VALUE ? null : v)}
           disabled={!brand}
         >
-          <option value="">— None (unattributed) —</option>
+          <SelectItem value={NO_ASSET_VALUE}>— None (unattributed) —</SelectItem>
           {brand?.assets.map((a) => (
-            <option key={a.assetId} value={a.assetId}>
+            <SelectItem key={a.assetId} value={a.assetId}>
               {a.name}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
 
-        <button
+        <Button
           type="button"
-          className="text-xs text-muted-foreground underline disabled:no-underline disabled:opacity-50"
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-muted-foreground"
           onClick={() => setAssetId(null)}
           disabled={assetId === null}
         >
           Clear Active Asset
-        </button>
+        </Button>
       </div>
     </main>
   );
 }
 
 /**
- * A labelled native `<select>` — labelled and keyboard-navigable by default
- * (AGENTS.md §7). `onChange` hands back the raw selected value; the caller maps
- * it (e.g. the empty string ⇒ no Active Asset).
+ * A labelled shadcn `Select` — the `<label>`'s `htmlFor` targets the trigger's
+ * `id`, keeping the control labelled and keyboard-navigable (AGENTS.md §7).
+ * `onValueChange` hands back the selected item's value; the caller maps it (e.g.
+ * the Active-Asset "None" sentinel ⇒ no Active Asset). A `undefined` value shows
+ * the `placeholder`.
  */
 function SelectField({
   id,
   label,
   value,
-  onChange,
+  onValueChange,
+  placeholder,
   disabled,
   children,
 }: {
   id: string;
   label: string;
-  value: string;
-  onChange: (value: string) => void;
+  value: string | undefined;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
   disabled?: boolean;
   children: ReactNode;
 }) {
@@ -215,15 +236,12 @@ function SelectField({
       <label htmlFor={id} className="block text-xs font-medium">
         {label}
       </label>
-      <select
-        id={id}
-        className="w-full rounded border border-input bg-background p-1.5 text-sm disabled:opacity-50"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-      >
-        {children}
-      </select>
+      <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>{children}</SelectContent>
+      </Select>
     </div>
   );
 }
