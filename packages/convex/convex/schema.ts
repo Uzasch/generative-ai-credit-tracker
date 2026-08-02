@@ -163,5 +163,13 @@ export default defineSchema({
     // newest-first list reflects when anomalies were *observed* — not Convex row
     // creation time, which fire-and-forget mutations can reorder relative to
     // `observedAt` (finding: newest-first must key off `observedAt`).
-    .index('by_org_observed_at', ['organizationId', 'observedAt']),
+    .index('by_org_observed_at', ['organizationId', 'observedAt'])
+    // Exact reverse lookup from a generation's job-set `toolRef` to the anomalies
+    // that reference it (#18's `flagged` status): the live indicator resolves each
+    // shown event's flag through this index rather than scanning the org's whole
+    // anomaly history, so the read stays bounded AND never silently drops a still-
+    // relevant anomaly past a fixed scan window. `toolRef` is absent on a raw
+    // `click-no-request` (it references no generation), so those rows aren't indexed
+    // here — correctly, since they can never flag a row.
+    .index('by_org_tool_ref', ['organizationId', 'toolRef']),
 });

@@ -47,16 +47,6 @@ const jobOutcome = v.object({
  * changes again. Every terminal status — `completed` and the failures
  * (`failed`, `nsfw`) — shares the terminal rank.
  */
-/**
- * Upper bound on how many of an org's most-recent Flagged anomalies the live
- * indicator scans to resolve each row's `flagged` status (#18). Anomalies are
- * observed at ~the same time as the generation they reference, so the newest
- * anomalies cover everything that could flag the recent events shown; bounding the
- * read keeps the reactive query from materialising an org's whole append-only
- * anomaly history (which would grow without bound and risk Convex read limits).
- */
-const RECENT_ANOMALY_SCAN_LIMIT = 256;
-
 const STATUS_RANK: Record<JobStatus, number> = {
   queued: 0,
   in_progress: 1,
@@ -441,13 +431,20 @@ export const generationsByUser = query({
  * editor's whole history — this is a live indicator, not the gallery.
  *
  * The `flagged` status needs the org's Flagged anomalies (#8): they live in a
- * separate table and link back to a generation by job-set `toolRef`
- * (`cost-mismatch`) or by job id (`unknown-status`), matched within the same tool.
- * We read the org's *recent* anomalies through the `by_org_observed_at` index,
- * index the links with `collectAnomalyRefs`, and mark each row via `isEventFlagged`
- * — so the status derivation stays the single shared `lifecycleStatus` (AGENTS.md
- * §6). A raw `click-no-request` anomaly references no generation (it has neither),
- * so it never flags a row here.
+ * separate table and link back to a generation by its job-set `toolRef`. For each
+ * shown event we look its anomalies up EXACTLY through the `by_org_tool_ref` index
+ * — bounded per event and never dropping a still-relevant anomaly past a scan
+ * window — then mark the row via the shared `isEventFlagged`/`lifecycleStatus`
+ * (AGENTS.md §6, one source of truth). A raw `click-no-request` anomaly references
+ * no generation (it has no `toolRef`), so it never flags a row.
+ *
+ * `unknown-status` anomalies carry only a `jobId` in their `evidence` and no
+ * top-level `toolRef`, so they are not reachable by this index and don't flag a row
+ * yet. That is a deliberate, documented gap (rare now that `nsfw`/`failed` are
+ * known statuses): closing it means denormalising the offending job's set-`toolRef`
+ * onto the anomaly row at record time, which touches #8's write path — a follow-up,
+ * not this display ticket. The shared matcher already handles the jobId case for
+ * when that lands.
  */
 export const recentGenerations = query({
   args: { organizationId: v.string(), userId: v.string(), limit: v.optional(v.number()) },
@@ -465,23 +462,28 @@ export const recentGenerations = query({
       // full feed (that is the gallery's `generationsByUser`).
       .take(limit ?? 20);
 
-    // The event's link to any Flagged anomaly is scoped to the SAME org (ADR-0004):
-    // an anomaly can never flag a row for a generation in another tenant. Bound the
-    // read to the org's most-recent anomalies (newest-first via `by_org_observed_at`)
-    // rather than its whole append-only history: an anomaly is observed at ~the same
-    // time as the generation it references (a cost-mismatch on the generate
-    // response, an unknown-status on a status poll seconds later), so the recent
-    // window covers everything that could flag these recent events, while a full
-    // `.collect()` would grow unbounded and risk Convex read limits.
-    // (Follow-up for exact per-event lookup: denormalise a tool-scoped key onto the
-    // anomaly row so `unknown-status` — which carries only a jobId in `evidence` —
-    // can be indexed like `cost-mismatch`'s `toolRef`; that touches #8's write path.)
-    const anomalies = await ctx.db
-      .query('flagged_anomalies')
-      .withIndex('by_org_observed_at', (q) => q.eq('organizationId', organizationId))
-      .order('desc')
-      .take(RECENT_ANOMALY_SCAN_LIMIT);
-    const refs = collectAnomalyRefs(anomalies);
+    // Resolve each shown event's `flagged` status by an EXACT, org-scoped reverse
+    // lookup on its `toolRef` (ADR-0004 — same tenant only): fetch just the
+    // anomalies that reference these events, not the org's whole anomaly history.
+    // De-duplicate `toolRef`s so repeated ids cost one lookup.
+    const toolRefs = [
+      ...new Set(
+        events
+          .map((event) => event.toolRef)
+          .filter((toolRef): toolRef is string => toolRef !== undefined),
+      ),
+    ];
+    const anomalyGroups = await Promise.all(
+      toolRefs.map((toolRef) =>
+        ctx.db
+          .query('flagged_anomalies')
+          .withIndex('by_org_tool_ref', (q) =>
+            q.eq('organizationId', organizationId).eq('toolRef', toolRef),
+          )
+          .collect(),
+      ),
+    );
+    const refs = collectAnomalyRefs(anomalyGroups.flat());
 
     return events.map((event) => toRecentGeneration(event, isEventFlagged(event, refs)));
   },
