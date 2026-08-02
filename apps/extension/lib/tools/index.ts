@@ -17,4 +17,18 @@ export function extractUsage(
   return null;
 }
 
+/**
+ * Whether a captured response is a **generate request** for its tool (the call a
+ * Generate click fires), by request shape alone. Used by the click tripwire (#8)
+ * to correlate observed Generate clicks against real requests. Returns false for
+ * tools whose generate shape isn't known yet (adapters without `isGenerateRequest`).
+ */
+export function isGenerateRequest(res: CapturedResponse): boolean {
+  for (const adapter of ADAPTERS) {
+    if (!adapter.matches(res.url)) continue;
+    if (adapter.isGenerateRequest?.(res)) return true;
+  }
+  return false;
+}
+
 export type { CapturedResponse, ExtractedUsage, RawCapture, ToolAdapter };

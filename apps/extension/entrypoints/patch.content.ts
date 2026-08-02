@@ -1,4 +1,10 @@
-import { CAPTURE_HOST, CAPTURE_SOURCE, TOOL_MATCHES } from '@/lib/messaging';
+import {
+  CAPTURE_HOST,
+  CAPTURE_SOURCE,
+  REQUEST_STARTED_SOURCE,
+  type RequestStartedPayload,
+  TOOL_MATCHES,
+} from '@/lib/messaging';
 import type { RawCapture } from '@/lib/tools';
 
 /**
@@ -42,6 +48,19 @@ export default defineContentScript({
 
       // Fire the real request immediately — observe only, never block or modify.
       const responsePromise = originalFetch(...args);
+
+      // Request-start signal (#8): emit the instant the request fires, so the
+      // background can correlate a Generate click against this request now rather
+      // than when the response finally completes — a slow generate POST would
+      // otherwise outrun its click's window and false-flag as "no request". POSTs
+      // only (the generate call is a POST); observe-only, never delays the fetch.
+      if (method === 'POST') {
+        const started: RequestStartedPayload = { url, method, startedAt: Date.now() };
+        window.postMessage(
+          { source: REQUEST_STARTED_SOURCE, payload: started },
+          window.location.origin,
+        );
+      }
       // Attach a rejection handler so observing never adds an unhandled
       // rejection to the page; the page still gets the original promise below.
       responsePromise.then(

@@ -23,6 +23,36 @@ const assignmentState = v.union(
   v.object({ status: v.literal('needs-assignment') }),
 );
 
+/**
+ * Raw evidence for a Flagged anomaly (ADR-0002), mirrors `AnomalyEvidence` in
+ * @token-tracker/shared. Discriminated on `kind`; each arm is the raw signal for
+ * one trigger, retained instead of guessed. Keep the two in sync.
+ *
+ * EXTENSION POINT (#13): the button displayed-cost capture adds a
+ * `v.object({ kind: v.literal('cost-mismatch'), … })` arm here (and the matching
+ * arm in @token-tracker/shared). The table, `record` mutation, and org-scoped
+ * query are all kind-agnostic, so #13 only adds a union arm — nothing else.
+ */
+const anomalyEvidence = v.union(
+  // A Generate click with no matching generate request within the window: the
+  // click tripwire observed a click but background correlation saw no generate
+  // request follow it (the "cancelled generation" case, CONTEXT.md).
+  v.object({
+    kind: v.literal('click-no-request'),
+    host: v.string(),
+    clickedAt: v.number(),
+    windowMs: v.number(),
+  }),
+  // A status poll reported a Job status not in the shared JobStatus union. The
+  // raw string is kept verbatim, never coerced into a known status (ADR-0002).
+  v.object({
+    kind: v.literal('unknown-status'),
+    jobId: v.string(),
+    rawStatus: v.string(),
+    sourceUrl: v.string(),
+  }),
+);
+
 const jobOutcome = v.object({
   jobId: v.string(),
   status: v.union(
@@ -100,4 +130,27 @@ export default defineSchema({
     // tenant's event, and duplicate `toolRef`s across orgs stay isolated
     // (a bare `by_tool_ref` `.unique()` would throw on the collision).
     .index('by_org_tool_ref', ['organizationId', 'toolRef']),
+
+  /**
+   * Flagged anomalies (ADR-0002): observations the deterministic runtime could
+   * not classify, kept as raw evidence for the offline Discovery agent (ADR-0003)
+   * — never billed. ORG-SCOPED like every other table (AGENTS.md §6, ADR-0004):
+   * the sole index leads with `organizationId` so one tenant can never read
+   * another's anomalies. The `evidence` union is the raw signal per trigger; the
+   * numbers in it are timestamps/durations kept as evidence, never netted into
+   * usage, so they need no magnitude bound. Insert-only, mirroring `raw_captures`.
+   */
+  flagged_anomalies: defineTable({
+    organizationId: v.string(),
+    tool: v.union(v.literal('flow'), v.literal('higgsfield'), v.literal('kling')),
+    // Tool-side job/job-set id when the trigger has one; absent for a raw click.
+    toolRef: v.optional(v.string()),
+    observedAt: v.number(),
+    evidence: anomalyEvidence,
+  })
+    // Org-scoped and ordered by the observation time within the org, so the
+    // newest-first list reflects when anomalies were *observed* — not Convex row
+    // creation time, which fire-and-forget mutations can reorder relative to
+    // `observedAt` (finding: newest-first must key off `observedAt`).
+    .index('by_org_observed_at', ['organizationId', 'observedAt']),
 });

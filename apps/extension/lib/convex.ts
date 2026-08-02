@@ -1,4 +1,10 @@
-import type { GenerationEvent, JobOutcome, JobStatus, RefundState } from '@token-tracker/shared';
+import type {
+  FlaggedAnomalyInput,
+  GenerationEvent,
+  JobOutcome,
+  JobStatus,
+  RefundState,
+} from '@token-tracker/shared';
 import { ConvexHttpClient } from 'convex/browser';
 import { type FunctionReference, makeFunctionReference } from 'convex/server';
 import type { RawCapture } from './tools';
@@ -57,6 +63,14 @@ const applyJobStatus = makeFunctionReference<'mutation'>(
   'events:applyJobStatus',
 ) as FunctionReference<'mutation', 'public', JobStatusUpdateInput, string | null>;
 
+// Records one Flagged anomaly (ADR-0002) — raw evidence the runtime couldn't
+// classify, for the offline Discovery agent (ADR-0003). Args come straight from
+// the shared `FlaggedAnomalyInput` (single source of truth), so this reference
+// can't drift from the mutation's validator. Returns the new row id.
+const recordFlaggedAnomaly = makeFunctionReference<'mutation'>(
+  'flaggedAnomalies:record',
+) as FunctionReference<'mutation', 'public', FlaggedAnomalyInput, string>;
+
 let client: ConvexHttpClient | null = null;
 function getClient(): ConvexHttpClient | null {
   if (!CONVEX_URL) return null;
@@ -106,5 +120,19 @@ export async function recordJobStatus(update: JobStatusUpdateInput): Promise<voi
     await c.mutation(applyJobStatus, update);
   } catch (err) {
     console.warn('[token-tracker] failed to apply job status update', err);
+  }
+}
+
+/** Record one Flagged anomaly (ADR-0002). Best-effort — never throws to the caller. */
+export async function recordAnomaly(input: FlaggedAnomalyInput): Promise<void> {
+  const c = getClient();
+  if (!c) {
+    console.warn('[token-tracker] VITE_CONVEX_URL not set — flagged anomaly dropped');
+    return;
+  }
+  try {
+    await c.mutation(recordFlaggedAnomaly, input);
+  } catch (err) {
+    console.warn('[token-tracker] failed to record flagged anomaly', err);
   }
 }
