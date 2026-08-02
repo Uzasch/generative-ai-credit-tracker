@@ -5,10 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "convex dev",
-    "typecheck": "if [ -d convex/_generated ]; then tsc --noEmit; else echo '⚠ convex: skipping typecheck — run `pnpm dev:convex` once to generate convex/_generated/'; fi"
+    "typecheck": "if [ -d convex/_generated ]; then tsc --noEmit; else echo '⚠ convex: skipping typecheck — run `pnpm dev:convex` once to generate convex/_generated/'; fi",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@token-tracker/shared": "workspace:*",
     "convex": "^1.17.0"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "convex-test": "^0.0.54",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   }
 }
