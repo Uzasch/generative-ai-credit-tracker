@@ -1,20 +1,13 @@
+import { loadActiveContext } from '@/lib/activeContext';
 import { appendRawCapture, recordGenerationEvent } from '@/lib/convex';
 import { isCaptureHostUrl, isCaptureMessage } from '@/lib/messaging';
-import { type CapturedResponse, extractUsage } from '@/lib/tools';
-
-/**
- * Stubbed attribution context. Real attribution — the Active Asset chosen in the
- * popup and `userId` from our own login (ADR-0004) — arrives in a later ticket.
- * Until then every event is recorded against this fixed context with an
- * `unattributed` asset so a real charge is never lost. Swapping in real
- * attribution is a single edit here.
- */
-const STUB_ATTRIBUTION = {
-  organizationId: 'org_stub',
-  userId: 'user_stub',
-  brandId: 'brand_stub',
-  assetId: 'unattributed',
-} as const;
+import { type CapturedResponse, type ExtractedUsage, extractUsage } from '@/lib/tools';
+import {
+  type ExtractedGeneration,
+  type Tool,
+  attribute,
+  isFlaggedAnomaly,
+} from '@token-tracker/shared';
 
 /**
  * Version of the detection rule that produced these events (ADR-0003). Bump when
@@ -53,23 +46,56 @@ export default defineBackground(() => {
     const result = extractUsage(res);
     if (!result) return;
 
-    // Record one structured GenerationEvent per recognised generation. Cost and
-    // toolRef come from the tool; org/user/brand are stubbed and the asset is
-    // `unattributed` until real attribution lands (ADR-0004). Child jobs are
-    // recorded as `queued` — their freshly-created state on the generate
-    // response; observed status transitions arrive via status polls later.
-    void recordGenerationEvent({
-      ...STUB_ATTRIBUTION,
-      tool: result.tool,
-      prompt: result.usage.prompt,
-      cost: result.usage.cost,
-      jobs: result.usage.jobIds.map((jobId) => ({ jobId, status: 'queued' as const })),
-      capturedAt: capture.capturedAt,
-      toolRef: result.usage.toolRef,
-      ruleVersion: RULE_VERSION,
-    });
+    void attributeAndRecord(result.tool, result.usage, capture.capturedAt);
   });
 });
+
+/**
+ * Attribute a recognised generation to the editor's Active context and record it.
+ *
+ * The context (identity + Active Asset) is established by the editor in the popup
+ * (ADR-0004). With an Active Asset the event carries it; with none, `attribute`
+ * yields a `needs-assignment` flagged anomaly whose event is `unattributed` — we
+ * still record that event so a real charge is never lost (spec story 4), and the
+ * `unattributed` asset is itself the signal the editor later resolves via
+ * assignment (CONTEXT.md). Before the editor has set up any context at all, the
+ * verbatim raw capture already retained above is the safety net (ADR-0001), so we
+ * skip structured recording rather than inventing an Organization or User.
+ */
+async function attributeAndRecord(
+  tool: Tool,
+  usage: ExtractedUsage,
+  capturedAt: number,
+): Promise<void> {
+  const ctx = await loadActiveContext();
+  if (!ctx) {
+    console.warn(
+      '[token-tracker] no Active context yet — retained raw capture only, skipped structured event',
+    );
+    return;
+  }
+
+  // Child jobs are `queued` — their freshly-created state on the generate
+  // response; observed status transitions arrive via status polls later (ADR-0002).
+  const extracted: ExtractedGeneration = {
+    tool,
+    cost: usage.cost,
+    prompt: usage.prompt,
+    jobIds: usage.jobIds,
+    toolRef: usage.toolRef,
+    refund: usage.refund,
+    capturedAt,
+    ruleVersion: RULE_VERSION,
+  };
+
+  const outcome = attribute(extracted, ctx);
+  if (isFlaggedAnomaly(outcome)) {
+    console.warn(`[token-tracker] generation flagged (${outcome.kind}): ${outcome.reason}`);
+    void recordGenerationEvent(outcome.event);
+    return;
+  }
+  void recordGenerationEvent(outcome);
+}
 
 /** Parse a captured body as JSON; undefined if absent or not JSON. */
 function parseJson(body: string | null): unknown {

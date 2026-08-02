@@ -70,3 +70,16 @@ export type GenerationEvent = {
 export function isTool(value: unknown): value is Tool {
   return typeof value === 'string' && (TOOLS as readonly string[]).includes(value);
 }
+
+// Attribution: the pure step that stamps a tool-extracted generation with the
+// editor's Active context, or flags it when no Active Asset is selected.
+export {
+  type ActiveContext,
+  type ExtractedGeneration,
+  type FlaggedAnomaly,
+  attribute,
+  isFlaggedAnomaly,
+} from './attribute';
+
+// Seed selection catalog for the popup's Org → Brand → Asset picker + login roster.
+export type { SeedAsset, SeedBrand, SeedCatalog, SeedOrg, SeedUser } from './seed';
