@@ -86,13 +86,27 @@ describe('DisplayedCostCorrelator', () => {
     expect(c.pendingCount).toBe(0);
   });
 
-  it('pairs the oldest matching click first when several are buffered', () => {
+  it('skips an ambiguous pairing rather than guessing (no false anomaly)', () => {
+    const c = new DisplayedCostCorrelator(WINDOW);
+    // Two generations started rapidly in one tab: both clicks sit in the window of
+    // the first response, so response-arrival order can't say which it belongs to.
+    // FIFO would mis-pair and raise a false cost-mismatch; instead we skip.
+    c.onClick(1, 1000);
+    c.onClick(5, 1500);
+    expect(c.matchResponse(2000)).toBeNull();
+    // Nothing was consumed — a wrong guess is never made.
+    expect(c.pendingCount).toBe(2);
+  });
+
+  it('pairs sequential generations whose windows do not overlap', () => {
     const c = new DisplayedCostCorrelator(WINDOW);
     c.onClick(1, 1000);
-    c.onClick(2, 1500);
-    // Two rapid clicks; the first response pairs with the oldest click.
+    // Its response lands and pairs unambiguously (only one click in range).
     expect(c.matchResponse(2000)).toBe(1);
-    expect(c.matchResponse(2200)).toBe(2);
+    // A later, separate generation — the first click is long pruned, so this is
+    // again unambiguous.
+    c.onClick(5, 20_000);
+    expect(c.matchResponse(21_000)).toBe(5);
     expect(c.pendingCount).toBe(0);
   });
 });

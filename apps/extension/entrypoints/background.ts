@@ -142,6 +142,15 @@ function handleRequestStarted(payload: RequestStartedPayload, tabId?: number): v
  * the anomaly to a different tenant (ADR-0004).
  */
 async function handleGenerateClick(payload: GenerateClickPayload, tabId?: number): Promise<void> {
+  // Buffer the button's displayed cost (#13) SYNCHRONOUSLY, before the await below:
+  // a fast generate response's `handleCapture` could otherwise run its ÷100
+  // cross-check (ADR-0005) while this handler is still suspended in
+  // `loadActiveContext`, and miss the cost entirely. It needs no Active context —
+  // the Org for any resulting anomaly comes from the capture side. Absent when the
+  // button exposed no readable figure — then there is simply nothing to pair.
+  if (payload.displayedCost !== undefined) {
+    costCorrelator.onClick(payload.displayedCost.value, payload.clickedAt, tabId);
+  }
   const ctx = await loadActiveContext();
   clickCorrelator.onClick({
     host: payload.host,
@@ -149,12 +158,6 @@ async function handleGenerateClick(payload: GenerateClickPayload, tabId?: number
     tabId,
     organizationId: ctx?.organizationId,
   });
-  // Buffer the button's displayed cost (#13) so the generate response captured in
-  // this tab can be reconciled against it (ADR-0005 ÷100 cross-check). Absent when
-  // the button exposed no readable figure — then there is simply nothing to pair.
-  if (payload.displayedCost !== undefined) {
-    costCorrelator.onClick(payload.displayedCost.value, payload.clickedAt, tabId);
-  }
   setTimeout(() => {
     flushExpiredClicks();
   }, CLICK_WINDOW_MS + CLICK_SWEEP_BUFFER_MS);

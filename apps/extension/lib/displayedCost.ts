@@ -112,25 +112,36 @@ export class DisplayedCostCorrelator {
   }
 
   /**
-   * A generate response was captured at `responseAt` in tab `tabId`. Consume and
-   * return the displayed cost of the OLDEST pending click from the SAME tab that
-   * plausibly belongs to it (clicked no more than `windowMs` before, and no more
-   * than `slopMs` after, the response). Returns null when none matches — the
-   * common case where the button showed no readable credit figure. Stale pendings
-   * past the window are pruned here (their response, if any, has already passed).
+   * A generate response was captured at `responseAt` in tab `tabId`. Return the
+   * displayed cost of the pending click from the SAME tab it belongs to — but ONLY
+   * when that pairing is unambiguous: exactly one pending click sits in the window
+   * (clicked no more than `windowMs` before, and no more than `slopMs` after, the
+   * response). Returns null otherwise, and consumes nothing.
+   *
+   * Why "exactly one" rather than oldest-first: two generations started rapidly in
+   * one tab can have their network responses complete out of order, so
+   * response-arrival order no longer identifies which click a response belongs to.
+   * Guessing (FIFO) would pair a response with the wrong click and raise a *false*
+   * `cost-mismatch`. The cross-check is a best-effort guardrail (the network cost
+   * stays primary, #13), so an ambiguous case is skipped, never guessed — a missed
+   * cross-check is safe; a false anomaly is not. Stale pendings are pruned here.
    */
   matchResponse(responseAt: number, tabId?: number): number | null {
     this.prune(responseAt);
+    const candidates: number[] = [];
     for (let i = 0; i < this.pending.length; i++) {
       const p = this.pending[i];
       if (p === undefined || p.tabId !== tabId) continue;
       const delta = responseAt - p.clickedAt; // > 0: response after click (normal order)
-      if (delta <= this.windowMs && delta >= -this.slopMs) {
-        this.pending.splice(i, 1);
-        return p.value;
-      }
+      if (delta <= this.windowMs && delta >= -this.slopMs) candidates.push(i);
     }
-    return null;
+    if (candidates.length !== 1) return null;
+    const [index] = candidates;
+    if (index === undefined) return null;
+    const match = this.pending[index];
+    if (match === undefined) return null;
+    this.pending.splice(index, 1);
+    return match.value;
   }
 
   /** How many displayed costs are still awaiting a response (for tests/inspection). */
