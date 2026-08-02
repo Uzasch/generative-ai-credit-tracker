@@ -1,9 +1,11 @@
 import {
   type AssignmentState,
   type JobOutcome,
+  type RecentGenerationView,
   type RefundState,
   type ResultMedia,
   type Tool,
+  lifecycleStatus,
   mediaKindOf,
 } from '@token-tracker/shared';
 
@@ -90,6 +92,29 @@ export function resultMedia(jobs: readonly JobOutcome[]): ResultMedia[] {
     }
   }
   return media;
+}
+
+/**
+ * Project one stored event into a recent-generation row. `hasAnomaly` is resolved
+ * by the query from the org's Flagged anomalies (a projection can't read the db),
+ * then folded into the pure {@link lifecycleStatus} so the status is derived in
+ * exactly one place (AGENTS.md §6).
+ */
+export function toRecentGeneration(
+  event: GalleryEventInput,
+  hasAnomaly: boolean,
+): RecentGenerationView {
+  return {
+    id: event._id,
+    tool: event.tool,
+    prompt: event.prompt,
+    cost: event.cost,
+    status: lifecycleStatus({ jobs: event.jobs, refund: event.refund, hasAnomaly }),
+    refund: event.refund,
+    jobCount: event.jobs.length,
+    completedCount: event.jobs.filter((job) => job.status === 'completed').length,
+    capturedAt: event.capturedAt,
+  };
 }
 
 /** Project one stored event into the gallery's read-only view shape. */

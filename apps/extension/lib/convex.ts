@@ -92,17 +92,25 @@ export async function appendRawCapture(capture: RawCapture): Promise<void> {
   }
 }
 
-/** Record one generation event to Convex. Best-effort — never throws to the caller. */
-export async function recordGenerationEvent(event: GenerationEventInput): Promise<void> {
+/**
+ * Record one generation event to Convex. Best-effort — never throws to the caller
+ * — but reports whether the write actually landed (`true`) or was dropped (no
+ * client configured, or the mutation failed). The caller uses that to avoid
+ * signalling "captured" (the toolbar badge, #18) for an event the source of truth
+ * never received.
+ */
+export async function recordGenerationEvent(event: GenerationEventInput): Promise<boolean> {
   const c = getClient();
   if (!c) {
     console.warn('[token-tracker] VITE_CONVEX_URL not set — generation event dropped');
-    return;
+    return false;
   }
   try {
     await c.mutation(recordEvent, event);
+    return true;
   } catch (err) {
     console.warn('[token-tracker] failed to record generation event', err);
+    return false;
   }
 }
 

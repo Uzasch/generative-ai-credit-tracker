@@ -1,6 +1,11 @@
 import type { JobOutcome } from '@token-tracker/shared';
 import { expect, test } from 'vitest';
-import { type GalleryEventInput, resultMedia, toGenerationView } from './gallery';
+import {
+  type GalleryEventInput,
+  resultMedia,
+  toGenerationView,
+  toRecentGeneration,
+} from './gallery';
 
 // Pure gallery-projection logic — no database (AGENTS.md §9). The Convex queries
 // that wrap these live in `events.ts` and are exercised by the convex-test
@@ -82,6 +87,35 @@ test('toGenerationView projects prompt, Cost, and Result media onto the view', (
     jobCount: 1,
     capturedAt: 5,
   });
+});
+
+test('toRecentGeneration projects the lifecycle status and progress for the indicator', () => {
+  // A completed job with no anomaly → generated, with 1-of-1 progress and Cost.
+  expect(toRecentGeneration(baseEvent, false)).toEqual({
+    id: 'event_1',
+    tool: 'higgsfield',
+    prompt: 'a raking-light still life',
+    cost: 100,
+    status: 'generated',
+    refund: { kind: 'none' },
+    jobCount: 1,
+    completedCount: 1,
+    capturedAt: 5,
+  });
+});
+
+test('toRecentGeneration folds hasAnomaly into the status — flagged outranks the outcome', () => {
+  // Same completed generation, but an anomaly references it → flagged wins.
+  expect(toRecentGeneration(baseEvent, true).status).toBe('flagged');
+});
+
+test('toRecentGeneration reports refunded with the credited amount carried through', () => {
+  const view = toRecentGeneration(
+    { ...baseEvent, cost: 1200, refund: { kind: 'refunded', amount: 1200, at: 9 } },
+    false,
+  );
+  expect(view.status).toBe('refunded');
+  expect(view.refund).toEqual({ kind: 'refunded', amount: 1200, at: 9 });
 });
 
 test('toGenerationView carries the refund state through so the gallery can net it out', () => {

@@ -123,6 +123,12 @@ export default defineSchema({
     .index('by_org_brand', ['organizationId', 'brandId'])
     .index('by_org_asset', ['organizationId', 'assetId'])
     .index('by_org_user', ['organizationId', 'userId'])
+    // The live tracking indicator's newest-first feed (#18): one editor's recent
+    // generations ordered by *capture time*, not Convex row-creation time. The
+    // background records events fire-and-forget, so inserts can land out of
+    // capture order; keying the order on `capturedAt` makes "newest-first" mean
+    // newest generated, so `.order('desc')` returns the genuinely most recent.
+    .index('by_org_user_captured', ['organizationId', 'userId', 'capturedAt'])
     // The gallery's per-editor intake tray: one editor's unattributed events.
     // Scoped by org + user (the gallery is a single editor's surface, ADR-0004)
     // and narrowed to the `'unattributed'` sentinel, so it never scans another
@@ -157,5 +163,13 @@ export default defineSchema({
     // newest-first list reflects when anomalies were *observed* — not Convex row
     // creation time, which fire-and-forget mutations can reorder relative to
     // `observedAt` (finding: newest-first must key off `observedAt`).
-    .index('by_org_observed_at', ['organizationId', 'observedAt']),
+    .index('by_org_observed_at', ['organizationId', 'observedAt'])
+    // Exact reverse lookup from a generation's job-set `toolRef` to the anomalies
+    // that reference it (#18's `flagged` status): the live indicator resolves each
+    // shown event's flag through this index rather than scanning the org's whole
+    // anomaly history, so the read stays bounded AND never silently drops a still-
+    // relevant anomaly past a fixed scan window. `toolRef` is absent on a raw
+    // `click-no-request` (it references no generation), so those rows aren't indexed
+    // here — correctly, since they can never flag a row.
+    .index('by_org_tool_ref', ['organizationId', 'toolRef']),
 });

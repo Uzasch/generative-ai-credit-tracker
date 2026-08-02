@@ -159,6 +159,19 @@ export {
   refundForStatus,
 } from './refund';
 
+// Live tracking indicator (issue #18): the pure derivation of one generation's
+// lifecycle status (tracked → generating → generated / refunded / flagged) from
+// its recorded fields plus whether a Flagged anomaly references it. Shared by the
+// Convex query feeding the popup so the status is defined once (AGENTS.md §6).
+export {
+  type AnomalyRefs,
+  type LifecycleStatus,
+  type RecentGenerationView,
+  collectAnomalyRefs,
+  isEventFlagged,
+  lifecycleStatus,
+} from './lifecycle';
+
 /**
  * Type guard for a job status observed in captured traffic. A status string we
  * don't recognise is never coerced — the caller flags it instead of guessing

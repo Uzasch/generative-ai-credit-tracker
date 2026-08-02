@@ -2,14 +2,16 @@ import {
   type JobStatus,
   type RefundMismatch,
   assertRefundAmount,
+  collectAnomalyRefs,
   crossCheckRefund,
+  isEventFlagged,
   isFailureStatus,
   refundForStatus,
 } from '@token-tracker/shared';
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { resolveAssetBrand } from './catalog';
-import { toGenerationView } from './gallery';
+import { toGenerationView, toRecentGeneration } from './gallery';
 import { sumNet } from './rollups';
 
 const refundState = v.union(
@@ -413,6 +415,77 @@ export const generationsByUser = query({
       .order('desc')
       .collect();
     return events.map(toGenerationView);
+  },
+});
+
+/**
+ * Live tracking indicator (issue #18): the current editor's most-recent
+ * generations within their Organization, newest-first, each carrying the derived
+ * lifecycle status (tracked → generating → generated / refunded / flagged) the
+ * popup row renders. The reactive read surface behind the popup's `useQuery`, so
+ * rows update in real time as status polls and refunds land — no manual refresh.
+ *
+ * Org- AND user-scoped (AGENTS.md §6, ADR-0004): read through `by_org_user` so an
+ * editor only ever sees their own generations, never another editor's or another
+ * tenant's. `.take(limit)` bounds the payload to recent activity rather than the
+ * editor's whole history — this is a live indicator, not the gallery.
+ *
+ * The `flagged` status needs the org's Flagged anomalies (#8): they live in a
+ * separate table and link back to a generation by its job-set `toolRef`. For each
+ * shown event we look its anomalies up EXACTLY through the `by_org_tool_ref` index
+ * — bounded per event and never dropping a still-relevant anomaly past a scan
+ * window — then mark the row via the shared `isEventFlagged`/`lifecycleStatus`
+ * (AGENTS.md §6, one source of truth). A raw `click-no-request` anomaly references
+ * no generation (it has no `toolRef`), so it never flags a row.
+ *
+ * `unknown-status` anomalies carry only a `jobId` in their `evidence` and no
+ * top-level `toolRef`, so they are not reachable by this index and don't flag a row
+ * yet. That is a deliberate, documented gap (rare now that `nsfw`/`failed` are
+ * known statuses): closing it means denormalising the offending job's set-`toolRef`
+ * onto the anomaly row at record time, which touches #8's write path — a follow-up,
+ * not this display ticket. The shared matcher already handles the jobId case for
+ * when that lands.
+ */
+export const recentGenerations = query({
+  args: { organizationId: v.string(), userId: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, { organizationId, userId, limit }) => {
+    const events = await ctx.db
+      .query('events')
+      // Order by CAPTURE time, not row-creation time: the background records events
+      // fire-and-forget, so inserts can land out of capture order and a plain
+      // `by_org_user` scan would return the wrong "most recent" set (#18).
+      .withIndex('by_org_user_captured', (q) =>
+        q.eq('organizationId', organizationId).eq('userId', userId),
+      )
+      .order('desc')
+      // Default to a small window — the indicator shows *recent* activity, not the
+      // full feed (that is the gallery's `generationsByUser`).
+      .take(limit ?? 20);
+
+    // Resolve each shown event's `flagged` status by an EXACT, org-scoped reverse
+    // lookup on its `toolRef` (ADR-0004 — same tenant only): fetch just the
+    // anomalies that reference these events, not the org's whole anomaly history.
+    // De-duplicate `toolRef`s so repeated ids cost one lookup.
+    const toolRefs = [
+      ...new Set(
+        events
+          .map((event) => event.toolRef)
+          .filter((toolRef): toolRef is string => toolRef !== undefined),
+      ),
+    ];
+    const anomalyGroups = await Promise.all(
+      toolRefs.map((toolRef) =>
+        ctx.db
+          .query('flagged_anomalies')
+          .withIndex('by_org_tool_ref', (q) =>
+            q.eq('organizationId', organizationId).eq('toolRef', toolRef),
+          )
+          .collect(),
+      ),
+    );
+    const refs = collectAnomalyRefs(anomalyGroups.flat());
+
+    return events.map((event) => toRecentGeneration(event, isEventFlagged(event, refs)));
   },
 });
 
