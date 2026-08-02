@@ -1,5 +1,23 @@
 import type { GenerationEvent, Tool } from '@token-tracker/shared';
 
+/**
+ * A raw request/response pair observed in the page's MAIN world and retained
+ * verbatim (ADR-0001). Bodies are unparsed strings; request headers are never
+ * captured, so no auth token is present. This is the wire payload from the
+ * MAIN-world probe to the background.
+ */
+export type RawCapture = {
+  url: string;
+  method: string;
+  status: number;
+  /** Serialized request body, or null when the request had none. */
+  requestBody: string | null;
+  /** Raw response body text, or null when it could not be read. */
+  responseBody: string | null;
+  /** Client capture time, ms since epoch. */
+  capturedAt: number;
+};
+
 /** A network response observed in the page's MAIN world. */
 export type CapturedResponse = {
   url: string;

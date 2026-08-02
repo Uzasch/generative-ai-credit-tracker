@@ -9,13 +9,15 @@ it never blocks, delays, or modifies a request.
 
 **Status:** ready-for-agent
 
-- [ ] The MAIN-world fetch patch is scoped to `fnf-api-gw.higgsfield.ai` only;
+- [x] The MAIN-world fetch patch is scoped to `fnf-api-gw.higgsfield.ai` only;
       `clerk` / `kopir` / `cms` / `sentry` hosts are never captured.
-- [ ] The patch captures request method + body (POST generate calls included —
+- [x] The patch captures request method + body (POST generate calls included —
       it currently hardcodes GET) and the response body; request headers are
       dropped entirely.
-- [ ] Each capture is appended to an append-only `raw_captures` Convex table
+- [x] Each capture is appended to an append-only `raw_captures` Convex table
       (method, url, request body, response body, timestamp).
 - [ ] Using Higgsfield fills `raw_captures`, and no auth token or request header
-      ever appears in the stored rows.
-- [ ] The page's own fetch behaviour is unchanged (body cloned, not consumed).
+      ever appears in the stored rows. — no-header/no-token guaranteed by design
+      (headers are never read); the live "fills `raw_captures`" pass is pending a
+      manual run of the loaded extension against Higgsfield.
+- [x] The page's own fetch behaviour is unchanged (body cloned, not consumed).

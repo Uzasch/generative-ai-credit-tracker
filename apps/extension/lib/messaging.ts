@@ -1,11 +1,11 @@
-import type { CapturedResponse } from './tools';
+import type { RawCapture } from './tools';
 
 /** Marker on window messages posted from the MAIN-world patch to the bridge. */
 export const CAPTURE_SOURCE = 'tt-capture' as const;
 
 export type CaptureMessage = {
   source: typeof CAPTURE_SOURCE;
-  payload: CapturedResponse;
+  payload: RawCapture;
 };
 
 export function isCaptureMessage(data: unknown): data is CaptureMessage {
