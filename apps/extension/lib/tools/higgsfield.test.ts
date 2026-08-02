@@ -4,6 +4,7 @@ import { extractUsage } from './index';
 import type { CapturedResponse } from './types';
 
 import freeImage from './__fixtures__/higgsfield/generate-free-image.json';
+import multiImage from './__fixtures__/higgsfield/generate-multi-image.json';
 import paidImage from './__fixtures__/higgsfield/generate-paid-image.json';
 import videoKling2 from './__fixtures__/higgsfield/generate-video-kling2_6.json';
 import videoKling3 from './__fixtures__/higgsfield/generate-video-kling3_0_turbo.json';
@@ -14,17 +15,18 @@ import statusInProgress from './__fixtures__/higgsfield/status-image-in-progress
 
 /**
  * Fixture-driven tests for the Higgsfield adapter (AGENTS.md §9). Each fixture is
- * a captured `fnf-api-gw` response (secrets stripped) shaped as the MAIN-world
+ * a real captured `fnf-api-gw` response (secrets stripped) shaped as the MAIN-world
  * probe delivers it. We assert external behaviour — given a captured response, what
  * usage comes out — never internal structure.
  *
- * Provenance: the generate fixtures and `status-image-in-progress` are real
- * captures. `status-image-completed` and `status-batch` are synthesized from the
- * documented Observed reference in `.scratch/higgsfield-tracking/spec.md`
- * (media at `results.raw.url`; jobs polled individually via `GET /fnf/jobs/{id}`,
- * transitioning `queued → in_progress → completed`) because no completed or
- * batch response has been captured yet (spec "Further Notes"). The single-poll
- * shape drives the demo; the batch shape is an inference and a follow-up.
+ * Provenance: all fixtures are real captures with user/project ids redacted.
+ * `generate-multi-image`, `status-image-completed`, and `status-batch` come from a
+ * captured 3-output ("batch_size: 3") generation: one job set at `cost: 300` with
+ * three child jobs; each job's media arrives on its own `GET /fnf/jobs/{id}` at
+ * `results.raw.url`; the `POST /fnf/jobs/status-batch` response reports per-job
+ * status only (no media) under `{ items: [...], missing: [...] }`. The
+ * `status-batch` fixture combines real item shapes at mixed statuses to exercise
+ * the reader.
  */
 
 /** Build the CapturedResponse the adapter sees from a stored capture fixture. */
@@ -77,6 +79,20 @@ describe('higgsfieldAdapter.extract — generate responses', () => {
     expect(usage.toolRef).toBe('a75cb1b5-e9a0-447c-8ef5-3467f33de3ba');
     expect(usage.jobIds).toEqual(['5488b706-cf6f-4799-9b57-da998578bc9b']);
   });
+
+  it('reads a multi-output generate (batch_size 3): whole-set cost 300, one toolRef, three child jobs', () => {
+    // One click = one job set = one charge (300 = 100 × 3), holding three jobs
+    // that each finish independently (spec: event = one Job set, N Jobs).
+    const usage = higgsfieldAdapter.extract(asResponse(multiImage));
+    if (usage?.kind !== 'generation') throw new Error('expected a generation extract');
+    expect(usage.cost).toBe(300);
+    expect(usage.toolRef).toBe('0d547efb-b757-437d-a566-890428d1115d');
+    expect(usage.jobIds).toEqual([
+      '41f3d26d-8fae-43af-ad8f-ea7382d2e074',
+      '7f9aab41-412a-40f0-a2da-b2708eb594b2',
+      '076c2117-8ade-41f8-ab33-395c2e1f7fe5',
+    ]);
+  });
 });
 
 describe('higgsfieldAdapter.extract — status responses (passive outcome updates)', () => {
@@ -94,25 +110,22 @@ describe('higgsfieldAdapter.extract — status responses (passive outcome update
     if (usage?.kind !== 'status') throw new Error('expected a status extract');
     expect(usage.updates).toEqual([
       {
-        jobId: '0b836048-2df4-455d-b513-6d248d544fec',
+        jobId: '41f3d26d-8fae-43af-ad8f-ea7382d2e074',
         status: 'completed',
         mediaUrl:
-          'https://cdn.higgsfield.ai/generated/0b836048-2df4-455d-b513-6d248d544fec/raw.png',
+          'https://d8j0ntlcm91z4.cloudfront.net/user_REDACTED/hf_20260802_051151_41f3d26d-8fae-43af-ad8f-ea7382d2e074.png',
       },
     ]);
   });
 
-  it('reads a POST /fnf/jobs/status-batch: one update per job, media on the completed one', () => {
+  it('reads a POST /fnf/jobs/status-batch: one status update per item, no media (media is on the per-job poll)', () => {
+    // Real batch shape: { items: [{ id, status }], missing: [] } — status only.
     const usage = higgsfieldAdapter.extract(asResponse(statusBatch));
     if (usage?.kind !== 'status') throw new Error('expected a status extract');
     expect(usage.updates).toEqual([
-      {
-        jobId: 'b3473756-0857-4b76-b3e1-555e4da41614',
-        status: 'completed',
-        mediaUrl:
-          'https://cdn.higgsfield.ai/generated/b3473756-0857-4b76-b3e1-555e4da41614/raw.mp4',
-      },
-      { jobId: '5488b706-cf6f-4799-9b57-da998578bc9b', status: 'in_progress' },
+      { jobId: '076c2117-8ade-41f8-ab33-395c2e1f7fe5', status: 'in_progress' },
+      { jobId: '41f3d26d-8fae-43af-ad8f-ea7382d2e074', status: 'completed' },
+      { jobId: '7f9aab41-412a-40f0-a2da-b2708eb594b2', status: 'queued' },
     ]);
   });
 

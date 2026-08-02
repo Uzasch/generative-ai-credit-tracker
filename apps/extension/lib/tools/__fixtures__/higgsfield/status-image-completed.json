@@ -1,13 +1,21 @@
 {
-  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/0b836048-2df4-455d-b513-6d248d544fec",
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/41f3d26d-8fae-43af-ad8f-ea7382d2e074",
   "method": "GET",
   "status": 200,
   "body": {
-    "id": "0b836048-2df4-455d-b513-6d248d544fec",
+    "id": "41f3d26d-8fae-43af-ad8f-ea7382d2e074",
     "status": "completed",
+    "job_set_type": "nano_banana_2_lite",
+    "job_set_id": "0d547efb-b757-437d-a566-890428d1115d",
+    "result": null,
     "results": {
       "raw": {
-        "url": "https://cdn.higgsfield.ai/generated/0b836048-2df4-455d-b513-6d248d544fec/raw.png"
+        "type": "image",
+        "url": "https://d8j0ntlcm91z4.cloudfront.net/user_REDACTED/hf_20260802_051151_41f3d26d-8fae-43af-ad8f-ea7382d2e074.png"
+      },
+      "min": {
+        "type": "image",
+        "url": "https://d8j0ntlcm91z4.cloudfront.net/user_REDACTED/hf_20260802_051151_41f3d26d-8fae-43af-ad8f-ea7382d2e074_min.webp"
       }
     }
   }

@@ -2,19 +2,30 @@
   "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/status-batch",
   "method": "POST",
   "status": 200,
-  "body": [
-    {
-      "id": "b3473756-0857-4b76-b3e1-555e4da41614",
-      "status": "completed",
-      "results": {
-        "raw": {
-          "url": "https://cdn.higgsfield.ai/generated/b3473756-0857-4b76-b3e1-555e4da41614/raw.mp4"
-        }
+  "body": {
+    "items": [
+      {
+        "id": "076c2117-8ade-41f8-ab33-395c2e1f7fe5",
+        "status": "in_progress",
+        "ip_check_finished": null,
+        "ip_detected": null,
+        "job_set_type": "nano_banana_2_lite"
+      },
+      {
+        "id": "41f3d26d-8fae-43af-ad8f-ea7382d2e074",
+        "status": "completed",
+        "ip_check_finished": null,
+        "ip_detected": null,
+        "job_set_type": "nano_banana_2_lite"
+      },
+      {
+        "id": "7f9aab41-412a-40f0-a2da-b2708eb594b2",
+        "status": "queued",
+        "ip_check_finished": null,
+        "ip_detected": null,
+        "job_set_type": "nano_banana_2_lite"
       }
-    },
-    {
-      "id": "5488b706-cf6f-4799-9b57-da998578bc9b",
-      "status": "in_progress"
-    }
-  ]
+    ],
+    "missing": []
+  }
 }

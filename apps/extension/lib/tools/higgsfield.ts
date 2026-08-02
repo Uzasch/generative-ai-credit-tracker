@@ -93,21 +93,22 @@ function isStatusBatch(res: CapturedResponse): boolean {
 
 /**
  * Recognise the tool's own status polls and turn them into passive Job outcome
- * updates. A single poll (`GET /fnf/jobs/{id}`) carries one job object; the
- * batch (`POST /fnf/jobs/status-batch`) carries an array of the same shape.
+ * updates. A single poll (`GET /fnf/jobs/{id}`) returns one job object at the top
+ * level; the batch (`POST /fnf/jobs/status-batch`) returns
+ * `{ items: [{ id, status, … }], missing: [...] }`. Both job shapes carry
+ * `{ id, status }`; only the single poll carries the result media
+ * (`results.raw.url`), so batch items advance status and the media arrives on the
+ * per-job `GET` — confirmed against a captured multi-output batch.
  *
- * The batch response shape is inferred from the single-job shape — no batch
- * response has been captured yet (spec "Further Notes") — so both paths share
- * one job-object reader. Returns `null` when nothing job-shaped is present, so a
- * same-URL non-job body (an error, `/fnf/jobs/accessible`) is not a status
- * update.
+ * Returns `null` when nothing job-shaped is present, so a same-URL non-job body
+ * (an error, `/fnf/jobs/accessible`) is not a status update.
  */
 function extractStatus(res: CapturedResponse): ExtractedStatus | null {
   let jobObjects: unknown[];
   if (isSingleStatusPoll(res)) {
     jobObjects = [res.body];
   } else if (isStatusBatch(res)) {
-    jobObjects = Array.isArray(res.body) ? res.body : [];
+    jobObjects = readBatchItems(res.body);
   } else {
     return null;
   }
@@ -118,6 +119,12 @@ function extractStatus(res: CapturedResponse): ExtractedStatus | null {
     if (update !== null) updates.push(update);
   }
   return updates.length > 0 ? { kind: 'status', updates } : null;
+}
+
+/** The status-batch response lists the polled jobs under `items`. */
+function readBatchItems(body: unknown): unknown[] {
+  if (!isRecord(body)) return [];
+  return Array.isArray(body.items) ? body.items : [];
 }
 
 /**
