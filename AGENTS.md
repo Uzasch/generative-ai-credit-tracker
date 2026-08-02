@@ -102,7 +102,7 @@ type GenerationEvent = {
   refund: RefundState;      // discriminated union; per-job refunds net into amount
   toolAccount?: string;     // shared tool seat (e.g. aibusiness@) — metadata only
   toolRef: string;          // tool-side job-set id, for reconciliation
-  ruleVersion: string;      // detection-rule version that produced this event (ADR-0003)
+  ruleVersion: number;      // detection-rule version that produced this event (ADR-0003)
   capturedAt: number;       // client ms epoch
 };
 

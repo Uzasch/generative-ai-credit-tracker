@@ -1,0 +1,10 @@
+{
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/user",
+  "method": "GET",
+  "status": 200,
+  "body": {
+    "id": "REDACTED_USER",
+    "plan_type": "ultra",
+    "workspace_id": "REDACTED_WORKSPACE"
+  }
+}

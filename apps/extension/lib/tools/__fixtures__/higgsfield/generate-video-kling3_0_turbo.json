@@ -1,0 +1,28 @@
+{
+  "url": "https://fnf-api-gw.higgsfield.ai/fnf/jobs/v2/kling3_0_turbo",
+  "method": "POST",
+  "status": 200,
+  "body": {
+    "id": "REDACTED_PROJECT",
+    "job_sets": [
+      {
+        "id": "a75cb1b5-e9a0-447c-8ef5-3467f33de3ba",
+        "type": "kling3_0_turbo",
+        "project_id": "REDACTED_PROJECT",
+        "cost": 750,
+        "params": {
+          "batch_size": null,
+          "prompt": "a child like character  "
+        },
+        "jobs": [
+          {
+            "id": "5488b706-cf6f-4799-9b57-da998578bc9b",
+            "status": "queued",
+            "user_id": "REDACTED_USER"
+          }
+        ]
+      }
+    ],
+    "has_more": false
+  }
+}
