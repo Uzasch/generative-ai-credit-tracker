@@ -33,10 +33,12 @@ const jobOutcome = v.object({
 
 export default defineSchema({
   /**
-   * Phase-1 discovery probe (ADR-0001): append-only, retained raw traffic from
-   * `fnf-api-gw.higgsfield.ai`. Never modified after insert — refunds and batch
-   * cost are discovered here later, and every derived number stays replayable
-   * (ADR-0003). Headers are never captured, so no auth token lands here.
+   * Phase-1 discovery probe (ADR-0001): retained raw traffic from
+   * `fnf-api-gw.higgsfield.ai`. Rows are never modified after insert — refunds
+   * and batch cost are discovered here later, and every derived number stays
+   * replayable (ADR-0003). Headers are never captured, so no auth token lands
+   * here. Growth is bounded (ADR-0007), not by mutating rows but by not writing
+   * noise (denylist) or duplicate status polls, plus a retention-TTL prune.
    */
   raw_captures: defineTable({
     method: v.string(),
@@ -45,7 +47,13 @@ export default defineSchema({
     responseBody: v.union(v.string(), v.null()),
     status: v.number(),
     capturedAt: v.number(),
-  }).index('by_captured_at', ['capturedAt']),
+  })
+    // Retention prune ranges over the oldest rows (ADR-0007 TTL).
+    .index('by_captured_at', ['capturedAt'])
+    // De-dup looks up the most recent prior capture for the same URL to collapse
+    // identical consecutive status polls (ADR-0007). `capturedAt` orders the
+    // per-URL history so the latest is a single `.order('desc').first()`.
+    .index('by_url', ['url', 'capturedAt']),
 
   events: defineTable({
     organizationId: v.string(),

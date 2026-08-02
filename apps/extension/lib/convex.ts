@@ -11,9 +11,12 @@ import type { RawCapture } from './tools';
  */
 const CONVEX_URL = import.meta.env.VITE_CONVEX_URL as string | undefined;
 
+// Returns the new row id, or `null` when the capture was intentionally not
+// retained (denylisted or a duplicate status poll — ADR-0007). The caller
+// ignores the value; the probe is fire-and-forget.
 const recordRawCapture = makeFunctionReference<'mutation'>(
   'rawCaptures:record',
-) as FunctionReference<'mutation', 'public', RawCapture, string>;
+) as FunctionReference<'mutation', 'public', RawCapture, string | null>;
 
 /**
  * Arguments for the `events.record` mutation. Derived from the single source of

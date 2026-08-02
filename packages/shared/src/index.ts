@@ -114,6 +114,14 @@ export {
 // Seed selection catalog for the popup's Org → Brand → Asset picker + login roster.
 export type { SeedAsset, SeedBrand, SeedCatalog, SeedOrg, SeedUser } from './seed';
 
+// Capture-retention rules for the Phase-1 probe's `raw_captures` table (ADR-0007):
+// the noise denylist and identical-consecutive-capture de-dup that bound its growth.
+export {
+  type RawCaptureContent,
+  isDenylistedCaptureUrl,
+  isDuplicateCapture,
+} from './capture';
+
 /**
  * Type guard for a job status observed in captured traffic. A status string we
  * don't recognise is never coerced — the caller flags it instead of guessing
