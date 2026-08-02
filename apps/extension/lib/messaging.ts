@@ -1,3 +1,4 @@
+import { type DisplayedCost, isDisplayedCost } from './displayedCost';
 import type { RawCapture } from './tools';
 
 /** Marker on window messages posted from the MAIN-world patch to the bridge. */
@@ -92,6 +93,13 @@ export type GenerateClickPayload = {
   host: string;
   /** When the click fired, client ms epoch. */
   clickedAt: number;
+  /**
+   * Credits rendered on the Generate button when the click fired (#13), when the
+   * button exposed a readable credit figure. Absent when the DOM showed none — a
+   * degraded cross-check, never an error. Correlated with the response cost in the
+   * background; it never becomes the billed Cost (ADR-0005).
+   */
+  displayedCost?: DisplayedCost;
 };
 
 export type GenerateClickMessage = {
@@ -111,8 +119,12 @@ export function isGenerateClickMessage(data: unknown): data is GenerateClickMess
   if (msg.source !== GENERATE_CLICK_SOURCE) return false;
   const p = msg.payload;
   if (typeof p !== 'object' || p === null) return false;
-  const payload = p as { host?: unknown; clickedAt?: unknown };
-  return typeof payload.host === 'string' && typeof payload.clickedAt === 'number';
+  const payload = p as { host?: unknown; clickedAt?: unknown; displayedCost?: unknown };
+  if (typeof payload.host !== 'string' || typeof payload.clickedAt !== 'number') return false;
+  // `displayedCost` is optional (#13): validate its shape only when present, so a
+  // click that carried no readable credit figure is still a well-formed report.
+  if (payload.displayedCost !== undefined && !isDisplayedCost(payload.displayedCost)) return false;
+  return true;
 }
 
 /** Hosts the capture + bridge scripts run on. Keep in sync with wxt.config host_permissions. */

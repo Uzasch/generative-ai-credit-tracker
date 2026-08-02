@@ -26,12 +26,8 @@ const assignmentState = v.union(
 /**
  * Raw evidence for a Flagged anomaly (ADR-0002), mirrors `AnomalyEvidence` in
  * @token-tracker/shared. Discriminated on `kind`; each arm is the raw signal for
- * one trigger, retained instead of guessed. Keep the two in sync.
- *
- * EXTENSION POINT (#13): the button displayed-cost capture adds a
- * `v.object({ kind: v.literal('cost-mismatch'), … })` arm here (and the matching
- * arm in @token-tracker/shared). The table, `record` mutation, and org-scoped
- * query are all kind-agnostic, so #13 only adds a union arm — nothing else.
+ * one trigger, retained instead of guessed. Keep the two in sync — a new arm goes
+ * here, in @token-tracker/shared, and in `flaggedAnomalies.ts`.
  */
 const anomalyEvidence = v.union(
   // A Generate click with no matching generate request within the window: the
@@ -50,6 +46,15 @@ const anomalyEvidence = v.union(
     jobId: v.string(),
     rawStatus: v.string(),
     sourceUrl: v.string(),
+  }),
+  // The Generate button's displayed credits disagreed with the response cost
+  // under ADR-0005's ÷100 rule (#13). The response cost stays the billed Cost;
+  // both numbers are kept as evidence that a model may have broken the ratio.
+  v.object({
+    kind: v.literal('cost-mismatch'),
+    displayedCost: v.number(),
+    responseCost: v.number(),
+    expectedCost: v.number(),
   }),
 );
 

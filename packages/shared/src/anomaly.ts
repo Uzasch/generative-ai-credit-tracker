@@ -7,21 +7,24 @@ import type { Tool } from './index';
  * (ADR-0003) — never a billable {@link GenerationEvent}, never netted into usage.
  *
  * `AnomalyEvidence` is a discriminated union on `kind`; each arm carries the raw
- * signal for one trigger. This ticket (#8) ships two arms:
+ * signal for one trigger. Three arms ship today:
  *
- *  - `click-no-request` — a Generate click with no matching generate request
+ *  - `click-no-request` (#8) — a Generate click with no matching generate request
  *    within the correlation window. Raised by the ISOLATED-world click tripwire
  *    via background correlation against captured generate requests. The canonical
  *    "cancel a generation after clicking Generate" case (CONTEXT.md).
- *  - `unknown-status` — a Job status string that is not in the shared
+ *  - `unknown-status` (#8) — a Job status string that is not in the shared
  *    {@link JobStatus} union, observed in a status poll. The runtime records the
  *    raw string instead of coercing it into a known status (ADR-0002).
+ *  - `cost-mismatch` (#13) — the credits rendered on the Generate button at click
+ *    time disagree with the authoritative response cost under ADR-0005's ÷100
+ *    rule (`displayedCost × 100 ≠ job_sets[].cost`). The response cost stays the
+ *    billed Cost; the button figure is a cross-check only, retained as evidence
+ *    that a model may have violated the display ratio (see `reconcileDisplayedCost`).
  *
- * EXTENSION POINT (#13): the button displayed-cost capture adds a `cost-mismatch`
- * arm here (button cost ≠ response cost) plus a matching validator arm in
- * `packages/convex/convex/schema.ts`. Nothing else changes — the table, the
- * `record` mutation, and the org-scoped query are all kind-agnostic and already
- * emit into this same table.
+ * Adding an arm means adding it in all three mirrors: here, the Convex validator
+ * (`packages/convex/convex/schema.ts` + `flaggedAnomalies.ts`), and `isAnomalyKind`
+ * below. The table, `record` mutation, and org-scoped query stay kind-agnostic.
  */
 export type AnomalyEvidence =
   | {
@@ -41,6 +44,15 @@ export type AnomalyEvidence =
       rawStatus: string;
       /** Status-poll URL the unknown status came from, retained as evidence. */
       sourceUrl: string;
+    }
+  | {
+      kind: 'cost-mismatch';
+      /** Credits shown on the Generate button at click time (the ÷100 figure). */
+      displayedCost: number;
+      /** Authoritative internal cost from `job_sets[].cost` — the billed unit. */
+      responseCost: number;
+      /** What `responseCost` should have been under ADR-0005: `displayedCost × 100`. */
+      expectedCost: number;
     };
 
 /** The discriminants of {@link AnomalyEvidence} — the kinds of flagged anomaly. */
@@ -63,5 +75,5 @@ export type FlaggedAnomalyInput = {
 
 /** Type guard for an {@link AnomalyKind} coming off untrusted input. */
 export function isAnomalyKind(value: unknown): value is AnomalyKind {
-  return value === 'click-no-request' || value === 'unknown-status';
+  return value === 'click-no-request' || value === 'unknown-status' || value === 'cost-mismatch';
 }

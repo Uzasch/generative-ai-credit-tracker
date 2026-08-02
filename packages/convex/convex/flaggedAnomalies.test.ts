@@ -66,6 +66,38 @@ test('records an unknown-status anomaly, keeping the raw status verbatim', async
   expect(rows[0]?.toolRef).toBe('jobset_1');
 });
 
+test('records a cost-mismatch anomaly, keeping both cost numbers as evidence', async () => {
+  const t = convexTest(schema, modules);
+  const input: AnomalyInput = {
+    organizationId: ORG,
+    tool: 'higgsfield',
+    toolRef: 'jobset_7',
+    observedAt: 3000,
+    evidence: {
+      kind: 'cost-mismatch',
+      // Button showed "1 credit" but the response billed 250 internal units — the
+      // ÷100 display rule broke for this model (ADR-0005 guardrail, #13).
+      displayedCost: 1,
+      responseCost: 250,
+      expectedCost: 100,
+    },
+  };
+  await t.mutation(api.flaggedAnomalies.record, input);
+
+  const rows = await t.query(api.flaggedAnomalies.listByOrg, { organizationId: ORG });
+  expect(rows).toHaveLength(1);
+  const evidence = rows[0]?.evidence;
+  expect(evidence?.kind).toBe('cost-mismatch');
+  if (evidence?.kind === 'cost-mismatch') {
+    expect(evidence.displayedCost).toBe(1);
+    expect(evidence.responseCost).toBe(250);
+    expect(evidence.expectedCost).toBe(100);
+  }
+  // The response cost is never overwritten by the button figure — this row is
+  // evidence only, and the billable event keeps its captured cost elsewhere.
+  expect(rows[0]?.toolRef).toBe('jobset_7');
+});
+
 test('listByOrg returns newest-first', async () => {
   const t = convexTest(schema, modules);
   await t.mutation(api.flaggedAnomalies.record, {

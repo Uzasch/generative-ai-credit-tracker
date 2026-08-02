@@ -1,3 +1,4 @@
+import { readDisplayedCost } from '@/lib/displayedCost';
 import { GENERATE_CLICK_SOURCE, TRIPWIRE_MATCHES } from '@/lib/messaging';
 import { matchesGenerateLabel } from '@/lib/tripwire';
 
@@ -14,8 +15,11 @@ import { matchesGenerateLabel } from '@/lib/tripwire';
  * the ISOLATED world it has `browser.runtime`, so it messages the background
  * directly — no MAIN-world bridge, and no page-shared surface to trust.
  *
- * This ticket observes the click only; the button's displayed cost (and the
- * cost-mismatch anomaly) is #13, which emits into the same table.
+ * It also reads the button's displayed credit figure at click time (#13) and
+ * reports it on the same message; the background reconciles it against the
+ * response cost and raises a `cost-mismatch` anomaly in the same table. Reading is
+ * observe-only and total (never throws into the page); an unreadable figure is
+ * simply omitted, so the cross-check degrades gracefully.
  */
 export default defineContentScript({
   // Only tools whose adapter recognises generate requests, so a click can be
@@ -25,11 +29,20 @@ export default defineContentScript({
     document.addEventListener(
       'click',
       (event) => {
-        if (generateButtonLabel(event.target) === null) return;
+        const button = generateButton(event.target);
+        if (button === null) return;
+        // Read the button's displayed credits (#13). Null when the DOM exposes no
+        // figure — the report is still sent (for #8's click↔request correlation),
+        // just without a cross-check value.
+        const displayedCost = readDisplayedCost(button);
         browser.runtime
           .sendMessage({
             source: GENERATE_CLICK_SOURCE,
-            payload: { host: window.location.host, clickedAt: Date.now() },
+            payload: {
+              host: window.location.host,
+              clickedAt: Date.now(),
+              ...(displayedCost !== null ? { displayedCost } : {}),
+            },
           })
           .catch(() => {
             // Background may be asleep; the tripwire is best-effort.
@@ -42,19 +55,20 @@ export default defineContentScript({
 });
 
 /**
- * If the click landed on (or inside) a Generate control, return its accessible
- * label; otherwise null. Walks up at most a few ancestors from the event target
+ * If the click landed on (or inside) a Generate control, return that button
+ * element; otherwise null. Walks up at most a few ancestors from the event target
  * to the nearest button-like element and reads its aria-label/text — the minimal
- * DOM read needed to recognise the click, nothing more (AGENTS.md §5).
+ * DOM read needed to recognise the click, nothing more (AGENTS.md §5). Returning
+ * the element (not just its label) lets the caller read its displayed cost (#13).
  */
-function generateButtonLabel(target: EventTarget | null): string | null {
+function generateButton(target: EventTarget | null): Element | null {
   let el = target instanceof Element ? target : null;
   for (let depth = 0; el !== null && depth < 5; depth++, el = el.parentElement) {
     if (!isButtonLike(el)) continue;
     // Stop at the nearest button-like ancestor: if it isn't Generate, don't keep
     // climbing (a Generate button nested in a larger clickable region is rare and
     // out of scope for this minimal tripwire).
-    return matchesGenerateLabel(accessibleLabel(el)) ? accessibleLabel(el) : null;
+    return matchesGenerateLabel(accessibleLabel(el)) ? el : null;
   }
   return null;
 }

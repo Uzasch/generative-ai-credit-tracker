@@ -8,16 +8,16 @@ import { mutation, query } from './_generated/server';
  * These rows are the input to the offline Discovery agent (ADR-0003); they are
  * never billed and never net into usage.
  *
- * Two triggers write here today (#8): the click tripwire's `click-no-request`
- * (a Generate click with no matching generate request in the window) and the
- * status path's `unknown-status` (a Job status outside the shared JobStatus
- * union). The button cost-mismatch (#13) will emit into this same table by
- * adding a union arm to `anomalyEvidence` — this module needs no change for it.
+ * Three triggers write here today: the click tripwire's `click-no-request` (#8, a
+ * Generate click with no matching generate request in the window), the status
+ * path's `unknown-status` (#8, a Job status outside the shared JobStatus union),
+ * and the button `cost-mismatch` (#13, displayed credits ≠ response cost ÷ 100).
+ * The mutation and query are kind-agnostic, so a new trigger is just a new arm.
  */
 
 /**
  * Raw evidence per trigger, mirrors `AnomalyEvidence`/schema.ts. Discriminated on
- * `kind`. #13 adds the `cost-mismatch` arm in all three places (kept in sync).
+ * `kind`. A new arm is added in all three places (kept in sync).
  */
 const anomalyEvidence = v.union(
   v.object({
@@ -31,6 +31,15 @@ const anomalyEvidence = v.union(
     jobId: v.string(),
     rawStatus: v.string(),
     sourceUrl: v.string(),
+  }),
+  // Displayed credits (button, #13) disagreed with the response cost under the
+  // ÷100 rule (ADR-0005). Evidence only — never billed; the response cost stays
+  // the Cost.
+  v.object({
+    kind: v.literal('cost-mismatch'),
+    displayedCost: v.number(),
+    responseCost: v.number(),
+    expectedCost: v.number(),
   }),
 );
 
