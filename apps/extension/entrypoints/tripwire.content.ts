@@ -1,4 +1,4 @@
-import { GENERATE_CLICK_SOURCE, TOOL_MATCHES } from '@/lib/messaging';
+import { GENERATE_CLICK_SOURCE, TRIPWIRE_MATCHES } from '@/lib/messaging';
 import { matchesGenerateLabel } from '@/lib/tripwire';
 
 /**
@@ -18,7 +18,9 @@ import { matchesGenerateLabel } from '@/lib/tripwire';
  * cost-mismatch anomaly) is #13, which emits into the same table.
  */
 export default defineContentScript({
-  matches: TOOL_MATCHES,
+  // Only tools whose adapter recognises generate requests, so a click can be
+  // correlated against its real request (see TRIPWIRE_MATCHES).
+  matches: TRIPWIRE_MATCHES,
   main() {
     document.addEventListener(
       'click',

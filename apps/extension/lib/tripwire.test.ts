@@ -57,6 +57,18 @@ describe('ClickRequestCorrelator', () => {
     const c = new ClickRequestCorrelator(WINDOW);
     expect(c.onGenerateRequest(1234)).toBe(false);
   });
+
+  it("a request in one tab does not consume another tab's click", () => {
+    const c = new ClickRequestCorrelator(WINDOW);
+    const tab1Click = { host: HOST, clickedAt: 1000, tabId: 1 };
+    c.onClick(tab1Click);
+    // A generate request in a DIFFERENT tab must not explain tab 1's click.
+    expect(c.onGenerateRequest(1500, 2)).toBe(false);
+    expect(c.pendingCount).toBe(1);
+    // The real request in tab 1 does match it.
+    expect(c.onGenerateRequest(1600, 1)).toBe(true);
+    expect(c.pendingCount).toBe(0);
+  });
 });
 
 describe('toolFromHost', () => {

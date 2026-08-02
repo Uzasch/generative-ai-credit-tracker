@@ -19,6 +19,14 @@ export type PendingClick = {
   host: string;
   /** When the click fired, client ms epoch. */
   clickedAt: number;
+  /**
+   * Browser tab the click came from (the runtime message sender's tab id).
+   * Correlation is scoped to it so a generate request in one tab can never
+   * consume — and thereby suppress the anomaly of — a click in another tab.
+   * `undefined` when the sender exposed no tab (defensive; both sides then share
+   * the `undefined` scope).
+   */
+  tabId?: number;
 };
 
 /**
@@ -47,15 +55,18 @@ export class ClickRequestCorrelator {
   }
 
   /**
-   * A generate request was captured at `at`. Consume the OLDEST still-pending
-   * click it plausibly belongs to — one that fired no more than `windowMs` before
-   * the request (and no more than `slopMs` after it, for clock skew). Returns
-   * true when a click was matched, so that click will not be flagged.
+   * A generate request was observed at `at` in tab `tabId`. Consume the OLDEST
+   * still-pending click FROM THE SAME TAB that it plausibly belongs to — one that
+   * fired no more than `windowMs` before the request (and no more than `slopMs`
+   * after it, for clock skew). Returns true when a click was matched, so that
+   * click will not be flagged. Tab scoping stops a request in one tab from
+   * consuming (and thus suppressing the anomaly of) a click in another tab.
    */
-  onGenerateRequest(at: number): boolean {
+  onGenerateRequest(at: number, tabId?: number): boolean {
     for (let i = 0; i < this.pending.length; i++) {
       const click = this.pending[i];
       if (click === undefined) continue;
+      if (click.tabId !== tabId) continue;
       const delta = at - click.clickedAt; // > 0: request after click (the normal order)
       if (delta <= this.windowMs && delta >= -this.slopMs) {
         this.pending.splice(i, 1);

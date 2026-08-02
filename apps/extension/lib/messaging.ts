@@ -46,6 +46,43 @@ function isRawCapture(value: unknown): value is RawCapture {
   );
 }
 
+/**
+ * Marker on window messages posted from the MAIN-world patch the INSTANT a
+ * captured request is fired — before its response arrives. The click tripwire
+ * (#8) correlates Generate clicks against request *start* times: the normal
+ * capture message only lands after the response body is read, so a slow generate
+ * POST would otherwise be flagged as "no request" before its capture arrived.
+ */
+export const REQUEST_STARTED_SOURCE = 'tt-request-started' as const;
+
+/** Minimal request-start signal: enough to recognise a generate request by shape. */
+export type RequestStartedPayload = {
+  url: string;
+  method: string;
+  /** When the request was fired (synchronously, before the fetch), ms since epoch. */
+  startedAt: number;
+};
+
+export type RequestStartedMessage = {
+  source: typeof REQUEST_STARTED_SOURCE;
+  payload: RequestStartedPayload;
+};
+
+/** Validate a window/runtime message as a well-formed request-start signal. */
+export function isRequestStartedMessage(data: unknown): data is RequestStartedMessage {
+  if (typeof data !== 'object' || data === null) return false;
+  const msg = data as { source?: unknown; payload?: unknown };
+  if (msg.source !== REQUEST_STARTED_SOURCE) return false;
+  const p = msg.payload;
+  if (typeof p !== 'object' || p === null) return false;
+  const payload = p as { url?: unknown; method?: unknown; startedAt?: unknown };
+  return (
+    typeof payload.url === 'string' &&
+    typeof payload.method === 'string' &&
+    typeof payload.startedAt === 'number'
+  );
+}
+
 /** Marker on runtime messages posted from the ISOLATED-world click tripwire. */
 export const GENERATE_CLICK_SOURCE = 'tt-generate-click' as const;
 
@@ -84,3 +121,12 @@ export const TOOL_MATCHES = [
   'https://*.higgsfield.ai/*',
   'https://*.klingai.com/*',
 ];
+
+/**
+ * Hosts the click tripwire runs on: ONLY tools whose adapter recognises generate
+ * requests (`isGenerateRequest`). If the tripwire ran on a tool without that
+ * recognition (Flow, Kling today), every Generate click there would be flagged
+ * `click-no-request` because its real request is never matched. Add a host here
+ * once its adapter implements generate-request recognition (#8).
+ */
+export const TRIPWIRE_MATCHES = ['https://*.higgsfield.ai/*'];
