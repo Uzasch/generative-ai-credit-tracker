@@ -407,7 +407,7 @@ test('assignAsset refuses the unattributed sentinel as a target', async () => {
       eventId,
       assetId: 'unattributed',
     }),
-  ).rejects.toThrow(/not an Asset/);
+  ).rejects.toThrow(/unattributed.*sentinel/i);
 });
 
 test('assignAsset is org-scoped: another org cannot file this event', async () => {
