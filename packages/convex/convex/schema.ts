@@ -147,5 +147,10 @@ export default defineSchema({
     toolRef: v.optional(v.string()),
     observedAt: v.number(),
     evidence: anomalyEvidence,
-  }).index('by_org', ['organizationId']),
+  })
+    // Org-scoped and ordered by the observation time within the org, so the
+    // newest-first list reflects when anomalies were *observed* — not Convex row
+    // creation time, which fire-and-forget mutations can reorder relative to
+    // `observedAt` (finding: newest-first must key off `observedAt`).
+    .index('by_org_observed_at', ['organizationId', 'observedAt']),
 });

@@ -58,6 +58,28 @@ describe('ClickRequestCorrelator', () => {
     expect(c.onGenerateRequest(1234)).toBe(false);
   });
 
+  it('matches a request whose message arrives before its click (reordered delivery)', () => {
+    const c = new ClickRequestCorrelator(WINDOW);
+    // The request-start signal reaches the background first, before the click
+    // message. Its true timestamp is still AFTER the click (a click fires the
+    // request), so it must be buffered, not discarded.
+    expect(c.onGenerateRequest(1200, 7)).toBe(false);
+    // The click (fired at 1000, delivered late) then consumes the buffered request
+    // and is NOT left pending — so it won't be swept as a false anomaly.
+    c.onClick({ host: HOST, clickedAt: 1000, tabId: 7 });
+    expect(c.pendingCount).toBe(0);
+    expect(c.sweepExpired(1000 + WINDOW + 1)).toEqual([]);
+  });
+
+  it('a buffered request only matches a click from the same tab', () => {
+    const c = new ClickRequestCorrelator(WINDOW);
+    c.onGenerateRequest(1200, 1);
+    // A click in a different tab must not consume tab 1's buffered request.
+    const other = { host: HOST, clickedAt: 1000, tabId: 2 };
+    c.onClick(other);
+    expect(c.sweepExpired(1000 + WINDOW + 1)).toEqual([other]);
+  });
+
   it("a request in one tab does not consume another tab's click", () => {
     const c = new ClickRequestCorrelator(WINDOW);
     const tab1Click = { host: HOST, clickedAt: 1000, tabId: 1 };

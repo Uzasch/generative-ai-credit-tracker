@@ -80,7 +80,7 @@ export default defineBackground(() => {
       return;
     }
     if (isGenerateClickMessage(message)) {
-      handleGenerateClick(message.payload, sender.tab?.id);
+      void handleGenerateClick(message.payload, sender.tab?.id);
       return;
     }
   });
@@ -110,36 +110,42 @@ function handleRequestStarted(payload: RequestStartedPayload, tabId?: number): v
  * its window has elapsed. A generate request observed in the same tab meanwhile
  * removes the click from the sweep (`clickCorrelator.onGenerateRequest`); anything
  * still unmatched is recorded as a `click-no-request` anomaly (ADR-0002).
+ *
+ * The editor's Active Organization is resolved and bound to the click NOW, not at
+ * sweep time: an Org switch during the correlation window must not misattribute
+ * the anomaly to a different tenant (ADR-0004).
  */
-function handleGenerateClick(payload: GenerateClickPayload, tabId?: number): void {
-  clickCorrelator.onClick({ host: payload.host, clickedAt: payload.clickedAt, tabId });
+async function handleGenerateClick(payload: GenerateClickPayload, tabId?: number): Promise<void> {
+  const ctx = await loadActiveContext();
+  clickCorrelator.onClick({
+    host: payload.host,
+    clickedAt: payload.clickedAt,
+    tabId,
+    organizationId: ctx?.organizationId,
+  });
   setTimeout(() => {
-    void flushExpiredClicks();
+    flushExpiredClicks();
   }, CLICK_WINDOW_MS + CLICK_SWEEP_BUFFER_MS);
 }
 
 /**
  * Record a `click-no-request` anomaly for every click whose window has elapsed
- * with no matching generate request. Scoped to the editor's Active Organization
- * (ADR-0004): with no Active context we don't invent one — the clicks are dropped,
- * consistent with the capture path.
+ * with no matching generate request, attributing each to the Organization that
+ * was Active when the click was observed (bound in `handleGenerateClick`). A click
+ * observed with no Active context carries no Org and is dropped — we never invent
+ * one (ADR-0004), consistent with the capture path.
  */
-async function flushExpiredClicks(): Promise<void> {
-  const expired = clickCorrelator.sweepExpired(Date.now());
-  if (expired.length === 0) return;
-
-  const ctx = await loadActiveContext();
-  if (!ctx) {
-    console.warn('[token-tracker] no Active context — click-no-request anomalies dropped');
-    return;
-  }
-
-  for (const click of expired) {
+function flushExpiredClicks(): void {
+  for (const click of clickCorrelator.sweepExpired(Date.now())) {
+    if (click.organizationId === undefined) {
+      console.warn('[token-tracker] click had no Active Org — click-no-request anomaly dropped');
+      continue;
+    }
     // The tripwire only runs on the tracked tool hosts, so this is defensive.
     const tool = toolFromHost(click.host);
     if (tool === null) continue;
     void recordAnomaly({
-      organizationId: ctx.organizationId,
+      organizationId: click.organizationId,
       tool,
       observedAt: click.clickedAt,
       evidence: {

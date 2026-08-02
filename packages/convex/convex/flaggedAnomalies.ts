@@ -55,17 +55,20 @@ export const record = mutation({
 });
 
 /**
- * List one Organization's flagged anomalies, newest-first. Org-scoped through the
- * `by_org` index (AGENTS.md §6, ADR-0004): a caller passing their own org can
- * never read another tenant's anomalies. This is the read surface the Discovery
- * agent's export path (ADR-0003) and any in-app review will build on.
+ * List one Organization's flagged anomalies, newest-first by observation time.
+ * Org-scoped through the `by_org_observed_at` index (AGENTS.md §6, ADR-0004): a
+ * caller passing their own org can never read another tenant's anomalies. Ordering
+ * on that index keys the "newest-first" contract off `observedAt` rather than
+ * Convex row-creation time (which fire-and-forget writes can reorder). This is the
+ * read surface the Discovery agent's export path (ADR-0003) and any in-app review
+ * will build on.
  */
 export const listByOrg = query({
   args: { organizationId: v.string() },
   handler: async (ctx, { organizationId }) => {
     return await ctx.db
       .query('flagged_anomalies')
-      .withIndex('by_org', (q) => q.eq('organizationId', organizationId))
+      .withIndex('by_org_observed_at', (q) => q.eq('organizationId', organizationId))
       .order('desc')
       .collect();
   },
